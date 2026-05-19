@@ -32,26 +32,26 @@ $products = $db->fetchAll(
 $brands = $db->fetchAll("SELECT DISTINCT brand FROM catalog_products WHERE brand IS NOT NULL AND brand != '' ORDER BY brand LIMIT 100");
 ?>
 
-<h4 class="mb-3">Catalog Products <small class="text-muted">(<?= format_number($total) ?>)</small></h4>
+<h4 class="mb-3"><?= t('catalog') ?> <small class="text-muted">(<?= format_number($total) ?>)</small></h4>
 
 <form class="row g-2 mb-3">
     <input type="hidden" name="page" value="catalog">
     <div class="col-md-4">
-        <input type="text" name="q" class="form-control form-control-sm" placeholder="Search name, SKU, EAN..." value="<?= esc($search) ?>">
+        <input type="text" name="q" class="form-control form-control-sm" placeholder="<?= t('search_placeholder') ?>" value="<?= esc($search) ?>">
     </div>
     <div class="col-md-3">
         <select name="brand" class="form-select form-select-sm">
-            <option value="">All brands</option>
+            <option value=""><?= t('all_brands') ?></option>
             <?php foreach ($brands as $b): ?>
                 <option value="<?= esc($b['brand']) ?>" <?= $brand === $b['brand'] ? 'selected' : '' ?>><?= esc($b['brand']) ?></option>
             <?php endforeach; ?>
         </select>
     </div>
-    <div class="col-auto"><button class="btn btn-sm btn-primary">Search</button></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><?= t('search') ?></button></div>
 </form>
 
 <table class="table table-sm table-hover">
-    <thead><tr><th>ID</th><th>Name</th><th>Brand</th><th>Model</th><th>SKU</th><th>EAN</th><th>Offers</th><th>Suppliers</th></tr></thead>
+    <thead><tr><th>ID</th><th><?= t('supplier_name') ?></th><th><?= t('brand') ?></th><th><?= t('model') ?></th><th>SKU</th><th>EAN</th><th><?= t('offers_from') ?></th><th><?= t('suppliers') ?></th></tr></thead>
     <tbody>
     <?php foreach ($products as $p): ?>
         <tr style="cursor:pointer" onclick="location='<?= url('product', ['id' => $p['id']]) ?>'">

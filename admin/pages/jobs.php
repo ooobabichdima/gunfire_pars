@@ -11,7 +11,7 @@ $jobs = $db->fetchAll(
 );
 ?>
 
-<h4 class="mb-3">Job Runs <small class="text-muted">(<?= format_number($total) ?>)</small></h4>
+<h4 class="mb-3"><?= t('job_runs') ?> <small class="text-muted">(<?= format_number($total) ?>)</small></h4>
 
 <table class="table table-sm table-hover">
     <thead><tr><th>ID</th><th>Supplier</th><th>Type</th><th>Status</th><th>PID</th><th>Started</th><th>Duration</th><th>Result</th><th></th></tr></thead>

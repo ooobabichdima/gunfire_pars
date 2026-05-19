@@ -53,19 +53,19 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">All Offers <small class="text-muted">(<?= format_number($total) ?>)</small></h4>
+    <h4 class="mb-0"><?= t('all_offers') ?> <small class="text-muted">(<?= format_number($total) ?>)</small></h4>
     <a href="<?= url('offers', array_merge(array_filter(['q' => $search, 'supplier_id' => $supplierId, 'active' => $active]), ['export' => 'csv'])) ?>"
-       class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i> Export CSV</a>
+       class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i> <?= t('export_csv') ?></a>
 </div>
 
 <form class="row g-2 mb-3">
     <input type="hidden" name="page" value="offers">
     <div class="col-md-3">
-        <input type="text" name="q" class="form-control form-control-sm" placeholder="Search name, SKU, EAN, brand..." value="<?= esc($search) ?>">
+        <input type="text" name="q" class="form-control form-control-sm" placeholder="<?= t('search_offers') ?>" value="<?= esc($search) ?>">
     </div>
     <div class="col-md-2">
         <select name="supplier_id" class="form-select form-select-sm">
-            <option value="">All suppliers</option>
+            <option value=""><?= t('all_suppliers') ?></option>
             <?php foreach ($suppliers as $s): ?>
                 <option value="<?= $s['id'] ?>" <?= $supplierId == $s['id'] ? 'selected' : '' ?>><?= esc($s['code']) ?></option>
             <?php endforeach; ?>
@@ -73,17 +73,17 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </div>
     <div class="col-md-2">
         <select name="active" class="form-select form-select-sm">
-            <option value="">All</option>
-            <option value="1" <?= $active === '1' ? 'selected' : '' ?>>Active</option>
-            <option value="0" <?= $active === '0' ? 'selected' : '' ?>>Inactive</option>
+            <option value=""><?= t('all') ?></option>
+            <option value="1" <?= $active === '1' ? 'selected' : '' ?>><?= t('active') ?></option>
+            <option value="0" <?= $active === '0' ? 'selected' : '' ?>><?= t('inactive') ?></option>
         </select>
     </div>
-    <div class="col-auto"><button class="btn btn-sm btn-primary">Search</button></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><?= t('search') ?></button></div>
 </form>
 
 <div class="table-responsive">
     <table class="table table-sm table-hover">
-        <thead><tr><th>ID</th><th>Supplier</th><th>Name</th><th>Brand</th><th>SKU</th><th>Price</th><th>Currency</th><th>Availability</th><th>Matched</th><th>Active</th><th>Last Seen</th><th></th></tr></thead>
+        <thead><tr><th>ID</th><th><?= t('suppliers') ?></th><th><?= t('supplier_name') ?></th><th><?= t('brand') ?></th><th>SKU</th><th><?= t('purchase_price') ?></th><th><?= t('currency') ?></th><th><?= t('availability') ?></th><th><?= t('matched') ?></th><th><?= t('active') ?></th><th><?= t('last_seen') ?></th><th></th></tr></thead>
         <tbody>
         <?php foreach ($offers as $o): ?>
             <tr>

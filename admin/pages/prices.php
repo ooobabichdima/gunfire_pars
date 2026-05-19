@@ -40,7 +40,7 @@ $singleSupplier = $db->fetchAll(
 );
 ?>
 
-<h4 class="mb-3">Price Comparison <small class="text-muted">(<?= format_number($total) ?> multi-supplier products)</small></h4>
+<h4 class="mb-3"><?= t('price_comparison') ?> <small class="text-muted">(<?= format_number($total) ?> <?= t('multi_supplier') ?>)</small></h4>
 
 <?php if (empty($products) && empty($singleSupplier)): ?>
     <div class="alert alert-info">No products with multiple supplier offers found yet. Run matching first.</div>
@@ -48,7 +48,7 @@ $singleSupplier = $db->fetchAll(
 
 <?php if (!empty($products)): ?>
 <table class="table table-sm table-hover">
-    <thead><tr><th>Product</th><th>Brand</th><th>Suppliers</th><th>Min Price</th><th>Max Price</th><th>Savings</th><th>Best</th></tr></thead>
+    <thead><tr><th><?= t('product') ?></th><th><?= t('brand') ?></th><th><?= t('suppliers') ?></th><th><?= t('min_price') ?></th><th><?= t('max_price') ?></th><th><?= t('savings') ?></th><th><?= t('best_supplier') ?></th></tr></thead>
     <tbody>
     <?php foreach ($products as $p): ?>
         <?php $savings = (float)$p['max_price'] - (float)$p['min_price']; $supplierList = explode(',', $p['suppliers_by_price']); ?>
@@ -68,9 +68,9 @@ $singleSupplier = $db->fetchAll(
 <?php endif; ?>
 
 <?php if (!empty($singleSupplier)): ?>
-<h5 class="mt-4">Single Supplier Products (Top 20 by price)</h5>
+<h5 class="mt-4"><?= t('single_supplier') ?></h5>
 <table class="table table-sm">
-    <thead><tr><th>Product</th><th>Brand</th><th>Supplier</th><th>Price</th><th>Currency</th></tr></thead>
+    <thead><tr><th><?= t('product') ?></th><th><?= t('brand') ?></th><th><?= t('suppliers') ?></th><th><?= t('purchase_price') ?></th><th><?= t('currency') ?></th></tr></thead>
     <tbody>
     <?php foreach ($singleSupplier as $p): ?>
         <tr style="cursor:pointer" onclick="location='<?= url('product', ['id' => $p['id']]) ?>'">

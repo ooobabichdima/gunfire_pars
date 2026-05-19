@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Parse Queue</h4>
+    <h4 class="mb-0"><?= t('parse_queue') ?></h4>
     <div>
         <?php foreach ($stats as $st): ?>
             <?= badge($st['status']) ?> <?= format_number($st['cnt']) ?>
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     <input type="hidden" name="page" value="queue">
     <div class="col-auto">
         <select name="supplier_id" class="form-select form-select-sm">
-            <option value="">All suppliers</option>
+            <option value=""><?= t('all_suppliers') ?></option>
             <?php foreach ($suppliers as $s): ?>
                 <option value="<?= $s['id'] ?>" <?= $supplierId == $s['id'] ? 'selected' : '' ?>><?= esc($s['code']) ?></option>
             <?php endforeach; ?>
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     </div>
     <div class="col-auto">
         <select name="status" class="form-select form-select-sm">
-            <option value="">All statuses</option>
+            <option value=""><?= t('all_statuses') ?></option>
             <?php foreach (['new','processing','done','error','skipped'] as $st): ?>
                 <option value="<?= $st ?>" <?= $status === $st ? 'selected' : '' ?>><?= $st ?></option>
             <?php endforeach; ?>
@@ -70,23 +70,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     </div>
     <div class="col-auto">
         <select name="type" class="form-select form-select-sm">
-            <option value="">All types</option>
+            <option value=""><?= t('all_types') ?></option>
             <?php foreach (['category','listing','product'] as $t): ?>
                 <option value="<?= $t ?>" <?= $type === $t ? 'selected' : '' ?>><?= $t ?></option>
             <?php endforeach; ?>
         </select>
     </div>
-    <div class="col-auto"><button class="btn btn-sm btn-primary">Filter</button></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><?= t('filter') ?></button></div>
 </form>
 
 <form method="POST">
     <?= csrf_field() ?>
     <div class="mb-2">
-        <button name="bulk_action" value="retry" class="btn btn-outline-warning btn-sm">Retry Selected</button>
-        <button name="bulk_action" value="delete" class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete selected?')">Delete Selected</button>
+        <button name="bulk_action" value="retry" class="btn btn-outline-warning btn-sm"><?= t('retry_selected') ?></button>
+        <button name="bulk_action" value="delete" class="btn btn-outline-danger btn-sm" onclick="return confirm('<?= t('confirm_delete') ?>')"><?= t('delete_selected') ?></button>
     </div>
     <table class="table table-sm table-hover">
-        <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('input[name=\'ids[]\']').forEach(c=>c.checked=this.checked)"></th><th>ID</th><th>Supplier</th><th>Type</th><th>URL</th><th>Status</th><th>Retries</th><th>Error</th><th>Created</th></tr></thead>
+        <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('input[name=\'ids[]\']').forEach(c=>c.checked=this.checked)"></th><th>ID</th><th><?= t('suppliers') ?></th><th><?= t('type') ?></th><th>URL</th><th><?= t('status') ?></th><th><?= t('retries') ?></th><th><?= t('error') ?></th><th><?= t('created') ?></th></tr></thead>
         <tbody>
         <?php foreach ($items as $item): ?>
             <tr>

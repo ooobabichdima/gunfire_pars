@@ -50,16 +50,16 @@ $typeIcons = [
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0"><i class="bi bi-bell"></i> Alerts <?php if ($unreadCount > 0): ?><span class="badge bg-danger"><?= $unreadCount ?></span><?php endif; ?></h4>
+    <h4 class="mb-0"><i class="bi bi-bell"></i> <?= t('alerts') ?> <?php if ($unreadCount > 0): ?><span class="badge bg-danger"><?= $unreadCount ?></span><?php endif; ?></h4>
     <div>
         <?php if ($unreadOnly): ?>
-            <a href="<?= url('alerts', ['all' => 1]) ?>" class="btn btn-outline-secondary btn-sm">Show All</a>
+            <a href="<?= url('alerts', ['all' => 1]) ?>" class="btn btn-outline-secondary btn-sm"><?= t('show_all') ?></a>
         <?php else: ?>
-            <a href="<?= url('alerts') ?>" class="btn btn-outline-secondary btn-sm">Unread Only</a>
+            <a href="<?= url('alerts') ?>" class="btn btn-outline-secondary btn-sm"><?= t('unread_only') ?></a>
         <?php endif; ?>
         <form method="POST" style="display:inline">
             <?= csrf_field() ?>
-            <button name="action" value="mark_all_read" class="btn btn-outline-primary btn-sm">Mark All Read</button>
+            <button name="action" value="mark_all_read" class="btn btn-outline-primary btn-sm"><?= t('mark_all_read') ?></button>
         </form>
     </div>
 </div>
@@ -74,7 +74,7 @@ $typeIcons = [
 <form method="POST">
     <?= csrf_field() ?>
     <div class="mb-2">
-        <button name="action" value="mark_read" class="btn btn-outline-primary btn-xs">Mark Selected as Read</button>
+        <button name="action" value="mark_read" class="btn btn-outline-primary btn-xs"><?= t('mark_selected_read') ?></button>
     </div>
     <div class="list-group">
         <?php foreach ($alerts as $a): ?>
@@ -101,7 +101,7 @@ $typeIcons = [
         </div>
         <?php endforeach; ?>
         <?php if (empty($alerts)): ?>
-            <div class="list-group-item text-center text-muted py-4">No alerts</div>
+            <div class="list-group-item text-center text-muted py-4"><?= t('no_alerts') ?></div>
         <?php endif; ?>
     </div>
 </form>

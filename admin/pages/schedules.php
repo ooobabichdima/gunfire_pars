@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             );
         }
     }
-    flash_set('success', 'Schedules saved');
+    flash_set('success', t('schedules_saved'));
     header('Location: ' . url('schedules'));
     exit;
 }
@@ -43,8 +43,8 @@ $defaultCrons = [
 ];
 ?>
 
-<h4 class="mb-3">Schedules</h4>
-<p class="text-muted small">Configure cron schedules per supplier per job type. Add <code>* * * * * php <?= dirname(__DIR__, 2) ?>/cron_scheduler.php</code> to system cron.</p>
+<h4 class="mb-3"><?= t('schedules') ?></h4>
+<p class="text-muted small"><?= t('schedule_hint') ?> <code>* * * * * php <?= dirname(__DIR__, 2) ?>/cron_scheduler.php</code></p>
 
 <form method="POST">
     <?= csrf_field() ?>
@@ -54,7 +54,7 @@ $defaultCrons = [
             <div class="card-header"><strong><?= esc($sup['name']) ?></strong> <code><?= esc($sup['code']) ?></code> <?= $sup['is_active'] ? badge('site') : badge('skipped') ?></div>
             <div class="card-body p-0">
                 <table class="table table-sm mb-0">
-                    <thead><tr><th style="width:120px">Job</th><th style="width:200px">Cron Expression</th><th style="width:100px">Batch</th><th style="width:80px">Enabled</th><th>Last Run</th><th>Next Run</th><th></th></tr></thead>
+                    <thead><tr><th style="width:120px"><?= t('type') ?></th><th style="width:200px"><?= t('cron_expression') ?></th><th style="width:100px"><?= t('batch_size') ?></th><th style="width:80px"><?= t('enabled') ?></th><th><?= t('last_run') ?></th><th><?= t('next_run') ?></th><th></th></tr></thead>
                     <tbody>
                     <?php foreach ($jobTypes as $jt):
                         $s = $scheduleMap[$sup['id']][$jt] ?? null;
@@ -67,7 +67,7 @@ $defaultCrons = [
                             <td><input type="checkbox" name="<?= $key ?>_enabled" class="form-check-input" <?= ($s['is_enabled'] ?? 0) ? 'checked' : '' ?>></td>
                             <td><small><?= time_ago($s['last_run_at'] ?? null) ?></small></td>
                             <td><small><?= esc($s['next_run_at'] ?? '—') ?></small></td>
-                            <td><button type="button" class="btn btn-outline-primary btn-xs" onclick="runJob(<?= $sup['id'] ?>, '<?= $jt ?>')">Run Now</button></td>
+                            <td><button type="button" class="btn btn-outline-primary btn-xs" onclick="runJob(<?= $sup['id'] ?>, '<?= $jt ?>')"><?= t('run_now') ?></button></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -76,5 +76,5 @@ $defaultCrons = [
         </div>
     <?php endforeach; ?>
 
-    <button type="submit" class="btn btn-primary">Save Schedules</button>
+    <button type="submit" class="btn btn-primary"><?= t('save') ?></button>
 </form>

@@ -81,7 +81,7 @@ $jobPerf = $db->fetchAll(
 );
 ?>
 
-<h4 class="mb-4"><i class="bi bi-bar-chart-line"></i> Analytics</h4>
+<h4 class="mb-4"><i class="bi bi-bar-chart-line"></i> <?= t('analytics') ?></h4>
 
 <!-- Supplier Health Cards -->
 <div class="row g-3 mb-4">
@@ -93,20 +93,20 @@ $jobPerf = $db->fetchAll(
                 <div class="row text-center mt-2">
                     <div class="col-4">
                         <div class="fs-5 fw-bold text-success"><?= format_number($s['active_offers']) ?></div>
-                        <small class="text-muted">Active</small>
+                        <small class="text-muted"><?= t('active') ?></small>
                     </div>
                     <div class="col-4">
                         <div class="fs-5 fw-bold text-danger"><?= format_number($s['inactive_offers']) ?></div>
-                        <small class="text-muted">Inactive</small>
+                        <small class="text-muted"><?= t('inactive') ?></small>
                     </div>
                     <div class="col-4">
                         <div class="fs-5 fw-bold text-primary"><?= $s['avg_price'] ? number_format((float)$s['avg_price'], 0) : '—' ?></div>
-                        <small class="text-muted">Avg Price</small>
+                        <small class="text-muted"><?= t('avg_price') ?></small>
                     </div>
                 </div>
                 <div class="mt-2">
-                    <small class="text-muted">Last activity: <?= time_ago($s['last_activity']) ?></small><br>
-                    <small class="text-muted">Oldest check: <?= time_ago($s['oldest_price_check']) ?></small>
+                    <small class="text-muted"><?= t('last_activity') ?>: <?= time_ago($s['last_activity']) ?></small><br>
+                    <small class="text-muted"><?= t('oldest_check') ?>: <?= time_ago($s['oldest_price_check']) ?></small>
                 </div>
                 <?php
                 $health = 'success';
@@ -114,7 +114,7 @@ $jobPerf = $db->fetchAll(
                 if ($s['last_activity'] && strtotime($s['last_activity']) < strtotime('-7 days')) $health = 'danger';
                 if (!$s['last_activity']) $health = 'secondary';
                 ?>
-                <div class="mt-2"><span class="badge bg-<?= $health ?>"><?= $health === 'success' ? 'Healthy' : ($health === 'warning' ? 'Stale' : ($health === 'danger' ? 'Critical' : 'No data')) ?></span></div>
+                <div class="mt-2"><span class="badge bg-<?= $health ?>"><?= $health === 'success' ? t('healthy') : ($health === 'warning' ? t('stale') : ($health === 'danger' ? t('critical') : t('no_data_yet'))) ?></span></div>
             </div>
         </div>
     </div>
@@ -125,13 +125,13 @@ $jobPerf = $db->fetchAll(
     <!-- Matching Coverage -->
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header">Matching Coverage</div>
+            <div class="card-header"><?= t('matching_coverage') ?></div>
             <div class="card-body text-center">
                 <div class="fs-2 fw-bold <?= $matchPct >= 80 ? 'text-success' : ($matchPct >= 50 ? 'text-warning' : 'text-danger') ?>"><?= $matchPct ?>%</div>
                 <div class="progress mb-2" style="height:8px">
                     <div class="progress-bar bg-success" style="width:<?= $matchPct ?>%"></div>
                 </div>
-                <small class="text-muted"><?= format_number($matchedOffers) ?> matched / <?= format_number($unmatchedOffers) ?> unmatched</small>
+                <small class="text-muted"><?= format_number($matchedOffers) ?> <?= t('matched_count') ?> / <?= format_number($unmatchedOffers) ?> <?= t('unmatched_count') ?></small>
             </div>
         </div>
     </div>
@@ -139,7 +139,7 @@ $jobPerf = $db->fetchAll(
     <!-- Queue Success Rate -->
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header">Queue Success Rate</div>
+            <div class="card-header"><?= t('queue_success_rate') ?></div>
             <div class="card-body">
                 <?php foreach ($queueHealth as $q): $rate = $q['total'] > 0 ? round($q['done'] / $q['total'] * 100, 1) : 0; ?>
                 <div class="mb-2">
@@ -148,7 +148,7 @@ $jobPerf = $db->fetchAll(
                         <div class="progress-bar bg-success" style="width:<?= $rate ?>%"></div>
                         <div class="progress-bar bg-danger" style="width:<?= $q['total'] > 0 ? round($q['errors'] / $q['total'] * 100, 1) : 0 ?>%"></div>
                     </div>
-                    <small class="text-muted"><?= format_number($q['done']) ?> done, <?= format_number($q['errors']) ?> errors, <?= format_number($q['pending']) ?> pending</small>
+                    <small class="text-muted"><?= format_number($q['done']) ?> <?= t('done') ?>, <?= format_number($q['errors']) ?> <?= t('errors') ?>, <?= format_number($q['pending']) ?> <?= t('pending') ?></small>
                 </div>
                 <?php endforeach; ?>
             </div>
@@ -158,10 +158,10 @@ $jobPerf = $db->fetchAll(
     <!-- Job Performance -->
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header">Job Performance (7d)</div>
+            <div class="card-header"><?= t('job_performance') ?></div>
             <div class="card-body">
                 <table class="table table-sm mb-0">
-                    <thead><tr><th>Job</th><th>Runs</th><th>Avg Time</th></tr></thead>
+                    <thead><tr><th><?= t('type') ?></th><th><?= t('runs') ?></th><th><?= t('avg_time') ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($jobPerf as $j): ?>
                         <tr>
@@ -181,7 +181,7 @@ $jobPerf = $db->fetchAll(
     <!-- Brand Distribution -->
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">Top Brands</div>
+            <div class="card-header"><?= t('top_brands') ?></div>
             <div class="card-body" style="height:300px">
                 <canvas id="brandChart"></canvas>
             </div>
@@ -191,7 +191,7 @@ $jobPerf = $db->fetchAll(
     <!-- Category Distribution -->
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">Top Categories</div>
+            <div class="card-header"><?= t('top_categories') ?></div>
             <div class="card-body" style="height:300px">
                 <canvas id="categoryChart"></canvas>
             </div>
@@ -202,10 +202,10 @@ $jobPerf = $db->fetchAll(
 <!-- Top Price Drops -->
 <?php if (!empty($topDrops)): ?>
 <div class="card mb-4">
-    <div class="card-header"><strong><i class="bi bi-arrow-down-circle text-success"></i> Top Price Drops (7 days)</strong></div>
+    <div class="card-header"><strong><i class="bi bi-arrow-down-circle text-success"></i> <?= t('top_price_drops') ?></strong></div>
     <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
-            <thead><tr><th>Product</th><th>Supplier</th><th>Was</th><th>Now</th><th>Drop</th><th>Date</th></tr></thead>
+            <thead><tr><th><?= t('product') ?></th><th><?= t('suppliers') ?></th><th><?= t('was') ?></th><th><?= t('now') ?></th><th><?= t('drop') ?></th><th><?= t('date') ?></th></tr></thead>
             <tbody>
             <?php foreach ($topDrops as $d):
                 $drop = (float)$d['prev_price'] - (float)$d['price_purchase'];

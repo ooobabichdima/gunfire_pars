@@ -77,16 +77,16 @@ $summary = $db->fetchOne(
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0"><i class="bi bi-clock-history"></i> Price History</h4>
+    <h4 class="mb-0"><i class="bi bi-clock-history"></i> <?= t('price_history_title') ?></h4>
     <a href="<?= url('price_history', array_merge(array_filter(['supplier_id' => $supplierId, 'product_id' => $productId, 'days' => $days]), ['export' => 'csv'])) ?>"
-       class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i> Export CSV</a>
+       class="btn btn-outline-success btn-sm"><i class="bi bi-download"></i> <?= t('export_csv') ?></a>
 </div>
 
 <div class="row g-2 mb-3">
     <div class="col-auto">
-        <span class="badge bg-primary"><?= format_number($summary['total_changes'] ?? 0) ?> changes</span>
-        <span class="badge bg-success"><i class="bi bi-arrow-down"></i> <?= format_number($summary['drops'] ?? 0) ?> drops</span>
-        <span class="badge bg-danger"><i class="bi bi-arrow-up"></i> <?= format_number($summary['increases'] ?? 0) ?> increases</span>
+        <span class="badge bg-primary"><?= format_number($summary['total_changes'] ?? 0) ?> <?= t('changes') ?></span>
+        <span class="badge bg-success"><i class="bi bi-arrow-down"></i> <?= format_number($summary['drops'] ?? 0) ?> <?= t('drops') ?></span>
+        <span class="badge bg-danger"><i class="bi bi-arrow-up"></i> <?= format_number($summary['increases'] ?? 0) ?> <?= t('increases') ?></span>
     </div>
 </div>
 
@@ -94,7 +94,7 @@ $summary = $db->fetchOne(
     <input type="hidden" name="page" value="price_history">
     <div class="col-auto">
         <select name="supplier_id" class="form-select form-select-sm">
-            <option value="">All suppliers</option>
+            <option value=""><?= t('all_suppliers') ?></option>
             <?php foreach ($suppliers as $s): ?>
                 <option value="<?= $s['id'] ?>" <?= $supplierId == $s['id'] ? 'selected' : '' ?>><?= esc($s['code']) ?></option>
             <?php endforeach; ?>
@@ -103,19 +103,19 @@ $summary = $db->fetchOne(
     <div class="col-auto">
         <select name="days" class="form-select form-select-sm">
             <?php foreach ([1, 3, 7, 14, 30, 90] as $d): ?>
-                <option value="<?= $d ?>" <?= $days == $d ? 'selected' : '' ?>><?= $d ?> days</option>
+                <option value="<?= $d ?>" <?= $days == $d ? 'selected' : '' ?>><?= $d ?> <?= t('days') ?></option>
             <?php endforeach; ?>
         </select>
     </div>
     <div class="col-auto">
-        <input type="number" name="product_id" class="form-control form-control-sm" placeholder="Product ID" value="<?= $productId ?: '' ?>" style="width:120px">
+        <input type="number" name="product_id" class="form-control form-control-sm" placeholder="<?= t('product_id') ?>" value="<?= $productId ?: '' ?>" style="width:120px">
     </div>
-    <div class="col-auto"><button class="btn btn-sm btn-primary">Filter</button></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><?= t('filter') ?></button></div>
 </form>
 
 <div class="table-responsive">
     <table class="table table-sm table-hover">
-        <thead><tr><th>Date</th><th>Supplier</th><th>Product</th><th>SKU</th><th>Prev Price</th><th>New Price</th><th>Change</th><th>Availability</th><th>Active</th></tr></thead>
+        <thead><tr><th><?= t('date') ?></th><th><?= t('suppliers') ?></th><th><?= t('product') ?></th><th>SKU</th><th><?= t('prev_price') ?></th><th><?= t('new_price') ?></th><th><?= t('change') ?></th><th><?= t('availability') ?></th><th><?= t('active') ?></th></tr></thead>
         <tbody>
         <?php foreach ($rows as $r):
             $hasPrev = $r['prev_price'] !== null;

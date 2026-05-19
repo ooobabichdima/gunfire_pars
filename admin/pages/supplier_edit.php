@@ -113,24 +113,24 @@ $cfg = json_decode($supplier['config_json'] ?? '{}', true) ?: [];
         <input type="text" name="config_xls_base_url" class="form-control" value="<?= esc($cfg['xls_base_url'] ?? '') ?>">
     </div>
     <div class="col-md-3">
-        <label class="form-label">XLS Login</label>
+        <label class="form-label"><?= t('xls_login') ?></label>
         <input type="text" name="config_xls_auth_login" class="form-control" value="<?= esc($cfg['xls_auth_login'] ?? '') ?>">
     </div>
     <div class="col-md-3">
-        <label class="form-label">XLS Password</label>
+        <label class="form-label"><?= t('xls_password') ?></label>
         <input type="text" name="config_xls_auth_password" class="form-control" value="<?= esc($cfg['xls_auth_password'] ?? '') ?>">
     </div>
     <div class="col-md-6">
-        <label class="form-label">Photo Base URL</label>
+        <label class="form-label"><?= t('photo_base_url') ?></label>
         <input type="text" name="config_photo_base_url" class="form-control" value="<?= esc($cfg['photo_base_url'] ?? '') ?>">
     </div>
     <div class="col-md-3">
-        <label class="form-label">Delay Max (ms)</label>
+        <label class="form-label"><?= t('delay_max') ?></label>
         <input type="number" name="config_delay_max_ms" class="form-control" value="<?= esc((string)($cfg['delay_max_ms'] ?? '')) ?>">
     </div>
 
     <div class="col-12">
-        <label class="form-label">Extra JSON Config</label>
+        <label class="form-label"><?= t('extra_json') ?></label>
         <textarea name="config_extra_json" class="form-control font-monospace" rows="3" placeholder='{"key": "value"}'><?php
             $known = ['currency','locale','xls_base_url','xls_auth_login','xls_auth_password','photo_base_url','delay_min_ms','delay_max_ms','batch_size'];
             $extra = array_diff_key($cfg, array_flip($known));
@@ -139,7 +139,7 @@ $cfg = json_decode($supplier['config_json'] ?? '{}', true) ?: [];
     </div>
 
     <div class="col-12">
-        <button type="submit" class="btn btn-primary"><?= $isNew ? 'Create' : 'Save' ?></button>
-        <a href="<?= url('suppliers') ?>" class="btn btn-outline-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary"><?= $isNew ? t('create') : t('save') ?></button>
+        <a href="<?= url('suppliers') ?>" class="btn btn-outline-secondary"><?= t('cancel') ?></a>
     </div>
 </form>
