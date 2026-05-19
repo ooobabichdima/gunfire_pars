@@ -57,8 +57,7 @@ final class ProxyManager
     }
 
     /**
-     * Get the next working proxy URL for Guzzle.
-     * Returns null if no proxies available (will use direct connection).
+     * Get a random working proxy URL.
      */
     public function getNext(): ?string
     {
@@ -66,29 +65,33 @@ final class ProxyManager
             return null;
         }
 
-        $attempts = 0;
-        $total = count($this->proxies);
-
-        while ($attempts < $total) {
-            $this->currentIndex = ($this->currentIndex + 1) % $total;
-            $proxy = $this->proxies[$this->currentIndex];
-
+        // Collect working proxies
+        $working = [];
+        foreach ($this->proxies as $i => $proxy) {
             if ($proxy['fails'] < $this->maxFails) {
-                return $proxy['url'];
+                $working[] = $i;
             }
-
-            $attempts++;
         }
 
-        // All proxies exhausted — refresh
-        $this->logger->warning("All proxies exhausted, fetching fresh list");
-        $this->fetchFreshProxies();
+        if (empty($working)) {
+            $this->logger->console("[proxy] Всі проксі вичерпані, оновлюю список...");
+            $this->fetchFreshProxies();
 
-        if (!empty($this->proxies)) {
-            return $this->proxies[0]['url'];
+            $working = [];
+            foreach ($this->proxies as $i => $proxy) {
+                if ($proxy['fails'] < $this->maxFails) {
+                    $working[] = $i;
+                }
+            }
         }
 
-        return null;
+        if (empty($working)) {
+            return null;
+        }
+
+        // Pick random working proxy
+        $idx = $working[array_rand($working)];
+        return $this->proxies[$idx]['url'];
     }
 
     /**

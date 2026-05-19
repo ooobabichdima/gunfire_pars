@@ -15,14 +15,12 @@ final class HttpClient
     private Client $client;
     private Logger $logger;
     private ?ProxyManager $proxyManager;
-    private int $retryCount;
-    private int $retryDelayMs;
     private int $delayMinMs;
     private int $delayMaxMs;
     private float $lastRequestTime = 0;
     private array $defaultHeaders;
     private array $clientConfig;
-    private bool $directBanned = false;
+    private int $directFailCount = 0;
 
     private const USER_AGENTS = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
@@ -38,8 +36,6 @@ final class HttpClient
     {
         $this->logger = $logger;
         $this->proxyManager = $proxyManager;
-        $this->retryCount = $config['retry_count'] ?? 3;
-        $this->retryDelayMs = $config['retry_delay_ms'] ?? 2000;
         $this->delayMinMs = $config['delay_min_ms'] ?? 1500;
         $this->delayMaxMs = $config['delay_max_ms'] ?? 4000;
 
@@ -102,6 +98,11 @@ final class HttpClient
         return $this->proxyManager;
     }
 
+    /**
+     * Strategy: round-robin between direct + proxies.
+     * Each product gets a different IP.
+     * direct → proxy1 → proxy2 → direct → proxy3 → ...
+     */
     private function request(string $method, string $url, array $options = []): ?ResponseInterface
     {
         $this->throttle();
@@ -111,118 +112,121 @@ final class HttpClient
             $options['headers']['User-Agent'] = self::USER_AGENTS[array_rand(self::USER_AGENTS)];
         }
 
-        $hasProxy = $this->proxyManager !== null && $this->proxyManager->isEnabled() && !isset($options['auth']);
+        $hasProxy = $this->proxyManager !== null
+            && $this->proxyManager->isEnabled()
+            && !isset($options['auth']);
 
-        // Strategy: direct first → if banned, switch to proxy
-        if (!$this->directBanned) {
-            $response = $this->tryDirect($method, $url, $options);
-            if ($response !== null) {
-                $code = $response->getStatusCode();
-                if ($code === 403 || $code === 429) {
-                    $this->logger->console("  [http] Прямий запит заблоковано ({$code}), переключаюсь на проксі");
-                    $this->directBanned = true;
-                } else {
-                    return $response;
+        // Build list of channels: [null=direct, proxy1, proxy2, ...]
+        $channels = $this->buildChannelList($hasProxy);
+
+        foreach ($channels as $channelProxy) {
+            $response = $this->attemptRequest($method, $url, $options, $channelProxy);
+
+            if ($response === null) {
+                // Timeout/connection error — mark failed, try next
+                if ($channelProxy !== null && $hasProxy) {
+                    $this->proxyManager->markFailed($channelProxy);
                 }
-            } else {
-                // Timeout on direct — also try proxy
-                if ($hasProxy) {
-                    $this->logger->debug("Direct timed out, trying proxy");
-                    $this->directBanned = true;
-                } else {
-                    return null;
+                if ($channelProxy === null) {
+                    $this->directFailCount++;
                 }
+                continue;
             }
+
+            $statusCode = $response->getStatusCode();
+
+            // Ban/rate-limit — try next channel
+            if ($statusCode === 403 || $statusCode === 429) {
+                if ($channelProxy !== null && $hasProxy) {
+                    $this->proxyManager->markFailed($channelProxy);
+                    $this->logger->debug("Proxy blocked ({$statusCode}): " . mb_substr($channelProxy, 0, 25));
+                } else {
+                    $this->directFailCount++;
+                    $this->logger->debug("Direct blocked ({$statusCode})");
+                }
+                continue;
+            }
+
+            // Server error — try next
+            if ($statusCode >= 500) {
+                if ($channelProxy !== null && $hasProxy) {
+                    $this->proxyManager->markFailed($channelProxy);
+                }
+                continue;
+            }
+
+            // Success — mark proxy as good, reset direct counter
+            if ($channelProxy !== null && $hasProxy) {
+                $this->proxyManager->markSuccess($channelProxy);
+            }
+            if ($channelProxy === null) {
+                $this->directFailCount = 0;
+            }
+
+            return $response;
         }
 
-        // Proxy mode
-        if ($hasProxy) {
-            $response = $this->tryWithProxies($method, $url, $options);
-            if ($response !== null) {
-                return $response;
-            }
-
-            // All proxies failed — try direct one more time as last resort
-            $this->logger->debug("All proxies failed, last-resort direct attempt");
-            $directResponse = $this->tryDirect($method, $url, $options);
-            if ($directResponse !== null && $directResponse->getStatusCode() < 400) {
-                $this->directBanned = false;
-                return $directResponse;
-            }
-        }
-
-        $this->logger->error("Всі спроби невдалі: {$url}");
+        $this->logger->error("Всі канали невдалі: {$url}");
         return null;
     }
 
-    private function tryDirect(string $method, string $url, array $options): ?ResponseInterface
+    /**
+     * Build a shuffled list of channels for this request.
+     * Includes direct (null) + proxy URLs, randomized.
+     */
+    private function buildChannelList(bool $hasProxy): array
     {
-        try {
-            $this->lastRequestTime = microtime(true);
-            unset($options['proxy']);
-            return $this->client->request($method, $url, $options);
-        } catch (ConnectException $e) {
-            $this->logger->warning("Direct timeout: " . mb_substr($e->getMessage(), 0, 80));
-            return null;
-        } catch (RequestException $e) {
-            $this->logger->warning("Direct error: " . mb_substr($e->getMessage(), 0, 80));
-            return null;
+        $channels = [];
+
+        // Add direct if not consistently banned
+        if ($this->directFailCount < 5) {
+            $channels[] = null; // null = direct connection
         }
+
+        // Add up to 3 random proxies
+        if ($hasProxy) {
+            for ($i = 0; $i < 3; $i++) {
+                $proxy = $this->proxyManager->getNext();
+                if ($proxy !== null && !in_array($proxy, $channels, true)) {
+                    $channels[] = $proxy;
+                }
+            }
+        }
+
+        // Always have at least direct as fallback
+        if (empty($channels)) {
+            $channels[] = null;
+        }
+
+        // Shuffle so each request uses a random channel first
+        shuffle($channels);
+
+        return $channels;
     }
 
-    private function tryWithProxies(string $method, string $url, array $options): ?ResponseInterface
+    private function attemptRequest(string $method, string $url, array $options, ?string $proxyUrl): ?ResponseInterface
     {
-        $maxProxyAttempts = min($this->retryCount + 2, $this->proxyManager->getWorkingCount() + 1);
+        try {
+            $requestOptions = $options;
 
-        for ($attempt = 0; $attempt < $maxProxyAttempts; $attempt++) {
-            $proxyUrl = $this->proxyManager->getNext();
-            if ($proxyUrl === null) {
-                $this->logger->debug("No more proxies available");
-                break;
-            }
-
-            try {
-                if ($attempt > 0) {
-                    usleep(1000 * 1000); // 1s between proxy attempts
-                }
-
-                $requestOptions = $options;
+            if ($proxyUrl !== null) {
                 $requestOptions['proxy'] = $proxyUrl;
                 $requestOptions['timeout'] = 12;
                 $requestOptions['connect_timeout'] = 6;
-
-                $this->lastRequestTime = microtime(true);
-                $response = $this->client->request($method, $url, $requestOptions);
-                $statusCode = $response->getStatusCode();
-
-                if ($statusCode === 403 || $statusCode === 429) {
-                    $this->proxyManager->markFailed($proxyUrl);
-                    $this->logger->debug("Proxy {$proxyUrl} blocked ({$statusCode}), next...");
-                    continue;
-                }
-
-                if ($statusCode >= 500) {
-                    $this->proxyManager->markFailed($proxyUrl);
-                    continue;
-                }
-
-                $this->proxyManager->markSuccess($proxyUrl);
-                return $response;
-
-            } catch (ConnectException $e) {
-                $this->proxyManager->markFailed($proxyUrl);
-                $this->logger->debug("Proxy timeout: " . mb_substr($proxyUrl, 0, 30));
-                continue;
-            } catch (ServerException $e) {
-                $this->proxyManager->markFailed($proxyUrl);
-                continue;
-            } catch (RequestException $e) {
-                $this->proxyManager->markFailed($proxyUrl);
-                continue;
             }
-        }
 
-        return null;
+            $this->lastRequestTime = microtime(true);
+            return $this->client->request($method, $url, $requestOptions);
+
+        } catch (ConnectException $e) {
+            $label = $proxyUrl ? mb_substr($proxyUrl, 0, 25) : 'direct';
+            $this->logger->debug("Timeout ({$label}): " . mb_substr($e->getMessage(), 0, 60));
+            return null;
+        } catch (ServerException $e) {
+            return null;
+        } catch (RequestException $e) {
+            return null;
+        }
     }
 
     private function throttle(): void
