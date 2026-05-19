@@ -226,7 +226,8 @@ final class ProxyManager
     {
         $working = [];
         $tested = 0;
-        $testUrl = 'https://httpbin.org/ip';
+        // Test against the actual target, not httpbin
+        $testUrl = 'https://gunfire.com/en/';
 
         // Shuffle for randomness
         shuffle($proxyUrls);
@@ -251,7 +252,7 @@ final class ProxyManager
                 ]);
 
                 $result = @file_get_contents($testUrl, false, $ctx);
-                if ($result !== false && str_contains($result, 'origin')) {
+                if ($result !== false && strlen($result) > 1000) {
                     $working[] = $proxyUrl;
                     fwrite(STDOUT, "\r[proxy] Тест: {$tested}/{$maxTest} | Робочих: " . count($working) . " | OK: {$proxyUrl}              ");
                 } else {
