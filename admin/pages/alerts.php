@@ -65,9 +65,9 @@ $typeIcons = [
 </div>
 
 <div class="mb-3">
-    <a href="<?= url('alerts') ?>" class="btn btn-sm <?= !$filter ? 'btn-primary' : 'btn-outline-secondary' ?>">All</a>
-    <?php foreach (['price_drop', 'price_increase', 'out_of_stock', 'back_in_stock', 'new_offer'] as $t): ?>
-        <a href="<?= url('alerts', ['type' => $t]) ?>" class="btn btn-sm <?= $filter === $t ? 'btn-primary' : 'btn-outline-secondary' ?>"><?= $typeIcons[$t] ?? '' ?> <?= $t ?></a>
+    <a href="<?= url('alerts') ?>" class="btn btn-sm <?= !$filter ? 'btn-primary' : 'btn-outline-secondary' ?>"><?= t('all') ?></a>
+    <?php foreach (['price_drop', 'price_increase', 'out_of_stock', 'back_in_stock', 'new_offer'] as $at): ?>
+        <a href="<?= url('alerts', ['type' => $at]) ?>" class="btn btn-sm <?= $filter === $at ? 'btn-primary' : 'btn-outline-secondary' ?>"><?= $typeIcons[$at] ?? '' ?> <?= t($at) ?></a>
     <?php endforeach; ?>
 </div>
 

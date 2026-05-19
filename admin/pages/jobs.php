@@ -14,7 +14,7 @@ $jobs = $db->fetchAll(
 <h4 class="mb-3"><?= t('job_runs') ?> <small class="text-muted">(<?= format_number($total) ?>)</small></h4>
 
 <table class="table table-sm table-hover">
-    <thead><tr><th>ID</th><th>Supplier</th><th>Type</th><th>Status</th><th>PID</th><th>Started</th><th>Duration</th><th>Result</th><th></th></tr></thead>
+    <thead><tr><th>ID</th><th><?= t('suppliers') ?></th><th><?= t('type') ?></th><th><?= t('status') ?></th><th><?= t('pid') ?></th><th><?= t('started') ?></th><th><?= t('duration') ?></th><th><?= t('result') ?></th><th></th></tr></thead>
     <tbody>
     <?php foreach ($jobs as $job): ?>
         <tr>
@@ -31,11 +31,11 @@ $jobs = $db->fetchAll(
             <td><small><?= esc(mb_substr($job['result_json'] ?? $job['error_message'] ?? '', 0, 80)) ?></small></td>
             <td>
                 <?php if ($job['status'] === 'running'): ?>
-                    <button class="btn btn-outline-danger btn-xs" onclick="stopJob(<?= $job['id'] ?>)">Stop</button>
+                    <button class="btn btn-outline-danger btn-xs" onclick="stopJob(<?= $job['id'] ?>)"><?= t('stop') ?></button>
                 <?php endif; ?>
                 <?php $logFile = dirname(__DIR__, 2) . '/logs/job_' . $job['id'] . '.log';
                 if (file_exists($logFile)): ?>
-                    <a href="<?= url('logs', ['file' => 'job_' . $job['id'] . '.log']) ?>" class="btn btn-outline-secondary btn-xs">Log</a>
+                    <a href="<?= url('logs', ['file' => 'job_' . $job['id'] . '.log']) ?>" class="btn btn-outline-secondary btn-xs"><?= t('log') ?></a>
                 <?php endif; ?>
             </td>
         </tr>
