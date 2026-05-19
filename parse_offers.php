@@ -56,22 +56,29 @@ if (!$lock->acquire()) {
 }
 
 $db = Database::getInstance($config['db']);
-$proxyManager = null;
-if ($useProxy) {
-    $proxyManager = new ProxyManager($logger, $config['log']['dir']);
-    $proxyManager->load();
-    // Add paid/custom proxies from config (highest priority)
-    foreach ($config['http']['custom_proxies'] ?? [] as $customProxy) {
-        $proxyManager->addProxy($customProxy);
+$proxyManager = new ProxyManager($logger, $config['log']['dir']);
+
+// Always load paid/custom proxies
+$customProxies = $config['http']['custom_proxies'] ?? [];
+$supplierRow = $db->fetchOne("SELECT config_json FROM suppliers WHERE code = ?", [$supplierCode]);
+$supplierCfg = json_decode($supplierRow['config_json'] ?? '{}', true) ?: [];
+$customProxies = array_merge($customProxies, $supplierCfg['proxies'] ?? []);
+
+if (!empty($customProxies)) {
+    foreach ($customProxies as $cp) {
+        $proxyManager->addProxy($cp);
     }
-    // Add paid proxies from supplier config_json
-    $supplierRow = $db->fetchOne("SELECT config_json FROM suppliers WHERE code = ?", [$supplierCode]);
-    $supplierCfg = json_decode($supplierRow['config_json'] ?? '{}', true) ?: [];
-    foreach ($supplierCfg['proxies'] ?? [] as $customProxy) {
-        $proxyManager->addProxy($customProxy);
-    }
-    $logger->console("Proxies: " . $proxyManager->getWorkingCount() . " working");
+    $logger->console("[proxy] Платних проксі: " . count($customProxies));
 }
+
+// Load free proxies only if --no-proxy is not set
+if ($useProxy) {
+    $proxyManager->load();
+}
+
+$proxyManager->setEnabled(!empty($customProxies) || $useProxy);
+$logger->console("[proxy] Всього: " . $proxyManager->getWorkingCount() . " робочих");
+
 $http = new HttpClient($config['http'], $logger, $proxyManager);
 $queue = new QueueManager($db, $logger);
 
