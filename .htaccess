@@ -1,0 +1,20 @@
+# Root .htaccess — deny access to everything except public/
+# This file only matters if DocumentRoot points to project root instead of public/
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Redirect all requests to public/
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ /public/$1 [L]
+</IfModule>
+
+# Block direct access to sensitive directories
+<FilesMatch "\.(php|json|lock|sql|log|md)$">
+    Require all denied
+</FilesMatch>
+
+# Allow public/index.php and public/api.php
+<Files "index.php">
+    Require all granted
+</Files>
