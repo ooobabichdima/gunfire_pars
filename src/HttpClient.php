@@ -113,7 +113,7 @@ final class HttpClient
         }
 
         $hasProxy = $this->proxyManager !== null
-            && $this->proxyManager->isEnabled()
+            && $this->proxyManager->getCount() > 0
             && !isset($options['auth']);
 
         // Build list of channels: [null=direct, proxy1, proxy2, ...]
@@ -187,9 +187,9 @@ final class HttpClient
             $channels[] = null; // null = direct connection
         }
 
-        // Add up to 3 random proxies
+        // Add up to 5 random proxies
         if ($hasProxy) {
-            for ($i = 0; $i < 3; $i++) {
+            for ($i = 0; $i < 5; $i++) {
                 $proxy = $this->proxyManager->getNext();
                 if ($proxy !== null && !in_array($proxy, $channels, true)) {
                     $channels[] = $proxy;
