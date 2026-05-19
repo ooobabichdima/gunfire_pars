@@ -76,10 +76,18 @@ if ($useProxy) {
     $proxyManager->load();
 }
 
-$proxyManager->setEnabled(!empty($customProxies) || $useProxy);
-$logger->console("[proxy] Всього: " . $proxyManager->getWorkingCount() . " робочих");
+$proxyManager->setEnabled(true);
+$logger->console("[proxy] Всього в пулі: " . $proxyManager->getCount() . " | Робочих: " . $proxyManager->getWorkingCount() . " | Enabled: " . ($proxyManager->isEnabled() ? 'yes' : 'no'));
+
+if ($proxyManager->getCount() === 0) {
+    $logger->console("[proxy] УВАГА: пул проксі порожній!");
+}
 
 $http = new HttpClient($config['http'], $logger, $proxyManager);
+
+// Verify HttpClient sees proxies
+$pm = $http->getProxyManager();
+$logger->console("[http] ProxyManager: " . ($pm ? "count=" . $pm->getCount() : "NULL"));
 $queue = new QueueManager($db, $logger);
 
 // Reset stuck items
