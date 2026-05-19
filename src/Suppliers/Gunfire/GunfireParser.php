@@ -384,25 +384,20 @@ final class GunfireParser extends AbstractSupplierParser
         $len = strlen($html);
 
         // Too short = error page, captcha, or blocked response
-        if ($len < 5000) {
+        if ($len < 2000) {
             return false;
         }
 
-        // Must contain product-related markers
-        $markers = ['/en/products/', 'gunfire', '.html'];
-        $found = 0;
+        // Large pages (>50KB) are real product pages, skip strict checks
+        if ($len > 50000) {
+            return true;
+        }
+
+        // Small pages (2-50KB) need validation
         $htmlLower = mb_strtolower($html);
-        foreach ($markers as $m) {
-            if (str_contains($htmlLower, $m)) {
-                $found++;
-            }
-        }
-        if ($found < 2) {
-            return false;
-        }
 
-        // Must NOT be a captcha/block page
-        $blockMarkers = ['captcha', 'cloudflare', 'ray id', 'access denied', 'just a moment', 'checking your browser'];
+        // Check if this is a captcha/challenge page (typically < 20KB)
+        $blockMarkers = ['captcha', 'ray id', 'access denied', 'checking your browser'];
         foreach ($blockMarkers as $bm) {
             if (str_contains($htmlLower, $bm)) {
                 return false;
