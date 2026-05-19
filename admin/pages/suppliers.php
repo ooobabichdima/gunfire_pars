@@ -8,12 +8,12 @@ $suppliers = $db->fetchAll(
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Suppliers</h4>
-    <a href="<?= url('supplier_edit') ?>" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Add Supplier</a>
+    <h4 class="mb-0"><?= t('suppliers') ?></h4>
+    <a href="<?= url('supplier_edit') ?>" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> <?= t('add_supplier') ?></a>
 </div>
 
 <table class="table table-hover">
-    <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>URL</th><th>Active</th><th>Offers</th><th>Last Activity</th><th>Actions</th></tr></thead>
+    <thead><tr><th><?= t('supplier_code') ?></th><th><?= t('supplier_name') ?></th><th><?= t('supplier_type') ?></th><th><?= t('supplier_url') ?></th><th><?= t('active') ?></th><th><?= t('all_offers') ?></th><th><?= t('last_activity') ?></th><th><?= t('actions') ?></th></tr></thead>
     <tbody>
     <?php foreach ($suppliers as $s): ?>
         <tr>
@@ -30,8 +30,8 @@ $suppliers = $db->fetchAll(
             <td><?= format_number($s['offer_count']) ?></td>
             <td><?= time_ago($s['last_activity']) ?></td>
             <td>
-                <a href="<?= url('supplier_edit', ['id' => $s['id']]) ?>" class="btn btn-outline-secondary btn-xs">Edit</a>
-                <a href="<?= url('schedules', ['supplier_id' => $s['id']]) ?>" class="btn btn-outline-info btn-xs">Schedule</a>
+                <a href="<?= url('supplier_edit', ['id' => $s['id']]) ?>" class="btn btn-outline-secondary btn-xs"><?= t('edit') ?></a>
+                <a href="<?= url('schedules', ['supplier_id' => $s['id']]) ?>" class="btn btn-outline-info btn-xs"><?= t('schedules') ?></a>
             </td>
         </tr>
     <?php endforeach; ?>

@@ -29,13 +29,13 @@ $recentJobs = $db->fetchAll(
 );
 ?>
 
-<h4 class="mb-4">Dashboard</h4>
+<h4 class="mb-4"><?= t('dashboard') ?></h4>
 
 <div class="row g-3 mb-4">
     <div class="col-md-3">
         <div class="card stat-card primary">
             <div class="card-body py-3">
-                <div class="text-muted small">Catalog Products</div>
+                <div class="text-muted small"><?= t('catalog_products') ?></div>
                 <div class="fs-4 fw-bold"><?= format_number($catalogCount) ?></div>
             </div>
         </div>
@@ -43,7 +43,7 @@ $recentJobs = $db->fetchAll(
     <div class="col-md-3">
         <div class="card stat-card success">
             <div class="card-body py-3">
-                <div class="text-muted small">Active Offers</div>
+                <div class="text-muted small"><?= t('active_offers') ?></div>
                 <div class="fs-4 fw-bold"><?= format_number($totalOffers) ?></div>
             </div>
         </div>
@@ -51,7 +51,7 @@ $recentJobs = $db->fetchAll(
     <div class="col-md-3">
         <div class="card stat-card warning">
             <div class="card-body py-3">
-                <div class="text-muted small">Queue Pending</div>
+                <div class="text-muted small"><?= t('queue_pending') ?></div>
                 <div class="fs-4 fw-bold"><?= format_number(($queueMap['new'] ?? 0) + ($queueMap['processing'] ?? 0)) ?></div>
             </div>
         </div>
@@ -59,7 +59,7 @@ $recentJobs = $db->fetchAll(
     <div class="col-md-3">
         <div class="card stat-card danger">
             <div class="card-body py-3">
-                <div class="text-muted small">Queue Errors</div>
+                <div class="text-muted small"><?= t('queue_errors') ?></div>
                 <div class="fs-4 fw-bold"><?= format_number($queueMap['error'] ?? 0) ?></div>
             </div>
         </div>
@@ -82,14 +82,14 @@ $recentJobs = $db->fetchAll(
                     </div>
                 </div>
                 <div class="mt-2">
-                    <span class="me-3"><strong><?= format_number($s['offer_count']) ?></strong> active offers</span>
-                    <span class="text-muted">Last: <?= time_ago($s['last_activity']) ?></span>
+                    <span class="me-3"><strong><?= format_number($s['offer_count']) ?></strong> <?= t('offers_count') ?></span>
+                    <span class="text-muted"><?= t('last_activity') ?>: <?= time_ago($s['last_activity']) ?></span>
                 </div>
                 <div class="mt-2">
-                    <button class="btn btn-outline-primary btn-sm" onclick="runJob(<?= $s['id'] ?>, 'scan')"><i class="bi bi-search"></i> Scan</button>
-                    <button class="btn btn-outline-success btn-sm" onclick="runJob(<?= $s['id'] ?>, 'parse')"><i class="bi bi-download"></i> Parse</button>
-                    <button class="btn btn-outline-warning btn-sm" onclick="runJob(<?= $s['id'] ?>, 'prices')"><i class="bi bi-currency-exchange"></i> Prices</button>
-                    <button class="btn btn-outline-info btn-sm" onclick="runJob(<?= $s['id'] ?>, 'match')"><i class="bi bi-link-45deg"></i> Match</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="runJob(<?= $s['id'] ?>, 'scan')"><i class="bi bi-search"></i> <?= t('scan') ?></button>
+                    <button class="btn btn-outline-success btn-sm" onclick="runJob(<?= $s['id'] ?>, 'parse')"><i class="bi bi-download"></i> <?= t('parse') ?></button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="runJob(<?= $s['id'] ?>, 'prices')"><i class="bi bi-currency-exchange"></i> <?= t('prices_update') ?></button>
+                    <button class="btn btn-outline-info btn-sm" onclick="runJob(<?= $s['id'] ?>, 'match')"><i class="bi bi-link-45deg"></i> <?= t('match') ?></button>
                     <a href="<?= url('supplier_edit', ['id' => $s['id']]) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-gear"></i></a>
                 </div>
             </div>
@@ -98,9 +98,9 @@ $recentJobs = $db->fetchAll(
     <?php endforeach; ?>
 </div>
 
-<h5>Recent Jobs</h5>
+<h5><?= t('recent_jobs') ?></h5>
 <table class="table table-sm table-hover">
-    <thead><tr><th>#</th><th>Supplier</th><th>Type</th><th>Status</th><th>Started</th><th>Duration</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th><?= t('suppliers') ?></th><th><?= t('type') ?></th><th><?= t('status') ?></th><th><?= t('started') ?></th><th><?= t('duration') ?></th><th></th></tr></thead>
     <tbody>
     <?php foreach ($recentJobs as $job): ?>
         <tr>
@@ -118,7 +118,7 @@ $recentJobs = $db->fetchAll(
             ?></td>
             <td>
                 <?php if ($job['status'] === 'running'): ?>
-                    <button class="btn btn-outline-danger btn-xs" onclick="stopJob(<?= $job['id'] ?>)">Stop</button>
+                    <button class="btn btn-outline-danger btn-xs" onclick="stopJob(<?= $job['id'] ?>)"><?= t('stop') ?></button>
                 <?php endif; ?>
             </td>
         </tr>

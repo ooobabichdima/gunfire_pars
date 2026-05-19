@@ -34,20 +34,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 
     if ($isNew) {
         if (empty($data['code'])) {
-            flash_set('error', 'Code is required');
+            flash_set('error', t('code_required'));
         } else {
             $db->insert('suppliers', array_merge($data, [
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s'),
             ]));
-            flash_set('success', 'Supplier created');
+            flash_set('success', t('supplier_created'));
             header('Location: ' . url('suppliers'));
             exit;
         }
     } else {
         $data['updated_at'] = date('Y-m-d H:i:s');
         $db->update('suppliers', $data, 'id = ?', [$id]);
-        flash_set('success', 'Supplier updated');
+        flash_set('success', t('supplier_updated'));
         header('Location: ' . url('suppliers'));
         exit;
     }
@@ -56,21 +56,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 $cfg = json_decode($supplier['config_json'] ?? '{}', true) ?: [];
 ?>
 
-<h4 class="mb-3"><?= $isNew ? 'Add Supplier' : 'Edit: ' . esc($supplier['name']) ?></h4>
+<h4 class="mb-3"><?= $isNew ? t('add_supplier') : t('edit_supplier') . ': ' . esc($supplier['name']) ?></h4>
 
 <form method="POST" class="row g-3" style="max-width: 800px;">
     <?= csrf_field() ?>
 
     <div class="col-md-4">
-        <label class="form-label">Code</label>
+        <label class="form-label"><?= t('supplier_code') ?></label>
         <input type="text" name="code" class="form-control" value="<?= esc($supplier['code'] ?? '') ?>" <?= $isNew ? '' : 'readonly' ?> required>
     </div>
     <div class="col-md-4">
-        <label class="form-label">Name</label>
+        <label class="form-label"><?= t('supplier_name') ?></label>
         <input type="text" name="name" class="form-control" value="<?= esc($supplier['name'] ?? '') ?>" required>
     </div>
     <div class="col-md-4">
-        <label class="form-label">Type</label>
+        <label class="form-label"><?= t('supplier_type') ?></label>
         <select name="type" class="form-select">
             <?php foreach (['site', 'api', 'csv', 'b2b'] as $t): ?>
                 <option value="<?= $t ?>" <?= ($supplier['type'] ?? 'site') === $t ? 'selected' : '' ?>><?= $t ?></option>
@@ -79,37 +79,37 @@ $cfg = json_decode($supplier['config_json'] ?? '{}', true) ?: [];
     </div>
 
     <div class="col-md-8">
-        <label class="form-label">Base URL</label>
+        <label class="form-label"><?= t('supplier_url') ?></label>
         <input type="text" name="base_url" class="form-control" value="<?= esc($supplier['base_url'] ?? '') ?>">
     </div>
     <div class="col-md-4">
-        <label class="form-label">Active</label>
+        <label class="form-label"><?= t('active') ?></label>
         <div class="form-check form-switch mt-2">
             <input class="form-check-input" type="checkbox" name="is_active" <?= ($supplier['is_active'] ?? 1) ? 'checked' : '' ?>>
         </div>
     </div>
 
-    <div class="col-12"><hr><h6>Supplier Config</h6></div>
+    <div class="col-12"><hr><h6><?= t('supplier_config') ?></h6></div>
 
     <div class="col-md-3">
-        <label class="form-label">Currency</label>
+        <label class="form-label"><?= t('currency') ?></label>
         <input type="text" name="config_currency" class="form-control" value="<?= esc($cfg['currency'] ?? '') ?>" placeholder="PLN, UAH, EUR">
     </div>
     <div class="col-md-3">
-        <label class="form-label">Locale</label>
+        <label class="form-label"><?= t('locale') ?></label>
         <input type="text" name="config_locale" class="form-control" value="<?= esc($cfg['locale'] ?? '') ?>" placeholder="en, pl, ua">
     </div>
     <div class="col-md-3">
-        <label class="form-label">Batch Size</label>
+        <label class="form-label"><?= t('batch_size') ?></label>
         <input type="number" name="config_batch_size" class="form-control" value="<?= esc((string)($cfg['batch_size'] ?? '')) ?>">
     </div>
     <div class="col-md-3">
-        <label class="form-label">Delay Min (ms)</label>
+        <label class="form-label"><?= t('delay_min') ?></label>
         <input type="number" name="config_delay_min_ms" class="form-control" value="<?= esc((string)($cfg['delay_min_ms'] ?? '')) ?>">
     </div>
 
     <div class="col-md-6">
-        <label class="form-label">XLS Base URL</label>
+        <label class="form-label"><?= t('xls_base_url') ?></label>
         <input type="text" name="config_xls_base_url" class="form-control" value="<?= esc($cfg['xls_base_url'] ?? '') ?>">
     </div>
     <div class="col-md-3">
