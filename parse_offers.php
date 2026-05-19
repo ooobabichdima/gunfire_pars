@@ -22,17 +22,19 @@ use App\Suppliers\SupplierParserFactory;
 // ---------------------------------------------------------------------------
 // CLI arguments
 // ---------------------------------------------------------------------------
-$opts = getopt('', ['supplier:', 'limit:', 'offset:', 'no-proxy', 'help']);
+$opts = getopt('', ['supplier:', 'limit:', 'offset:', 'no-proxy', 'proxy-only', 'help']);
 
 if (isset($opts['help'])) {
-    echo "Usage: php parse_offers.php --supplier=gunfire [--limit=50] [--no-proxy]\n";
-    echo "  --supplier   Supplier code (required)\n";
-    echo "  --limit      Batch size per run (default: 50)\n";
-    echo "  --no-proxy   Disable proxy rotation\n";
+    echo "Usage: php parse_offers.php --supplier=gunfire [--limit=50] [--no-proxy] [--proxy-only]\n";
+    echo "  --supplier    Supplier code (required)\n";
+    echo "  --limit       Batch size per run (default: 50)\n";
+    echo "  --no-proxy    Skip free proxy fetching (paid proxies still work)\n";
+    echo "  --proxy-only  Never use direct connection, only proxies\n";
     exit(0);
 }
 
 $useProxy = !isset($opts['no-proxy']);
+$proxyOnly = isset($opts['proxy-only']);
 
 $supplierCode = $opts['supplier'] ?? '';
 if (empty($supplierCode)) {
@@ -84,10 +86,10 @@ if ($proxyManager->getCount() === 0) {
 }
 
 $http = new HttpClient($config['http'], $logger, $proxyManager);
-
-// Verify HttpClient sees proxies
-$pm = $http->getProxyManager();
-$logger->console("[http] ProxyManager: " . ($pm ? "count=" . $pm->getCount() : "NULL"));
+if ($proxyOnly) {
+    $http->setProxyOnly(true);
+    $logger->console("[proxy] Режим: ТІЛЬКИ проксі (direct вимкнено)");
+}
 $queue = new QueueManager($db, $logger);
 
 // Reset stuck items

@@ -21,6 +21,7 @@ final class HttpClient
     private array $defaultHeaders;
     private array $clientConfig;
     private int $directFailCount = 0;
+    private bool $proxyOnly = false;
 
     private const USER_AGENTS = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
@@ -96,6 +97,11 @@ final class HttpClient
     public function getProxyManager(): ?ProxyManager
     {
         return $this->proxyManager;
+    }
+
+    public function setProxyOnly(bool $value): void
+    {
+        $this->proxyOnly = $value;
     }
 
     /**
@@ -182,8 +188,8 @@ final class HttpClient
     {
         $channels = [];
 
-        // Add direct if not consistently banned
-        if ($this->directFailCount < 5) {
+        // Add direct if not proxy-only and not consistently banned
+        if (!$this->proxyOnly && $this->directFailCount < 5) {
             $channels[] = null; // null = direct connection
         }
 
