@@ -14,12 +14,12 @@ return [
 
     'http' => [
         'timeout'         => 30,
-        'connect_timeout' => 10,
+        'connect_timeout' => 15,
         'retry_count'     => 3,
-        'retry_delay_ms'  => 2000,
-        'user_agent'      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'delay_min_ms'    => 1500,
-        'delay_max_ms'    => 4000,
+        'retry_delay_ms'  => 5000,
+        'user_agent'      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'delay_min_ms'    => 3000,
+        'delay_max_ms'    => 7000,
     ],
 
     'parser' => [
