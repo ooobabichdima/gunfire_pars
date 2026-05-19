@@ -13,82 +13,295 @@ $offers = $db->fetchAll(
 );
 
 $history = $db->fetchAll(
-    "SELECT h.*, so.name AS offer_name, s.code AS supplier_code
+    "SELECT h.*, so.name AS offer_name, s.code AS supplier_code, s.name AS supplier_name
      FROM supplier_offer_price_history h
      JOIN supplier_offers so ON so.id = h.supplier_offer_id
      JOIN suppliers s ON s.id = so.supplier_id
      WHERE so.catalog_product_id = ?
-     ORDER BY h.checked_at DESC LIMIT 50",
+     ORDER BY h.checked_at ASC",
     [$id]
 );
+
+// Collect all images from all offers
+$allImages = [];
+foreach ($offers as $o) {
+    $raw = json_decode($o['raw_data_json'] ?? '{}', true);
+    $imgs = $raw['images'] ?? [];
+    foreach ($imgs as $img) {
+        $allImages[$img] = $o['supplier_code'];
+    }
+}
+
+// Collect specs from all offers
+$allSpecs = [];
+foreach ($offers as $o) {
+    $raw = json_decode($o['raw_data_json'] ?? '{}', true);
+    $specs = $raw['specifications'] ?? [];
+    if (!empty($specs)) {
+        $allSpecs[$o['supplier_code']] = $specs;
+    }
+}
+
+// Build chart data — group by supplier
+$chartData = [];
+foreach ($history as $h) {
+    $code = $h['supplier_code'];
+    if (!isset($chartData[$code])) {
+        $chartData[$code] = ['labels' => [], 'prices' => [], 'regular' => []];
+    }
+    $chartData[$code]['labels'][] = $h['checked_at'];
+    $chartData[$code]['prices'][] = (float)$h['price_purchase'];
+    $chartData[$code]['regular'][] = (float)$h['price_regular'];
+}
+
+$chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0', '#fd7e14', '#20c997'];
 ?>
 
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="<?= url('catalog') ?>">Catalog</a></li>
-        <li class="breadcrumb-item active">#<?= $product['id'] ?></li>
+        <li class="breadcrumb-item active">#<?= $product['id'] ?> <?= esc(mb_substr($product['name'], 0, 50)) ?></li>
     </ol>
 </nav>
 
 <div class="row mb-4">
-    <div class="col-md-8">
+    <div class="col-md-7">
         <h4><?= esc($product['name']) ?></h4>
-        <table class="table table-sm" style="max-width: 400px;">
-            <tr><td class="text-muted">Brand</td><td><strong><?= esc($product['brand'] ?? '—') ?></strong></td></tr>
-            <tr><td class="text-muted">Model</td><td><code><?= esc($product['model'] ?? '—') ?></code></td></tr>
-            <tr><td class="text-muted">SKU</td><td><?= esc($product['sku'] ?? '—') ?></td></tr>
-            <tr><td class="text-muted">EAN</td><td><?= esc($product['ean'] ?? '—') ?></td></tr>
-            <tr><td class="text-muted">Bundle</td><td><?= $product['is_bundle'] ? '<span class="badge bg-info">Yes</span>' : 'No' ?></td></tr>
-        </table>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <table class="table table-sm">
+                    <tr><td class="text-muted" style="width:100px">Brand</td><td><strong><?= esc($product['brand'] ?? '—') ?></strong></td></tr>
+                    <tr><td class="text-muted">Model</td><td><code><?= esc($product['model'] ?? '—') ?></code></td></tr>
+                    <tr><td class="text-muted">SKU</td><td><?= esc($product['sku'] ?? '—') ?></td></tr>
+                    <tr><td class="text-muted">EAN</td><td><?= esc($product['ean'] ?? '—') ?></td></tr>
+                    <tr><td class="text-muted">Bundle</td><td><?= $product['is_bundle'] ? '<span class="badge bg-info">Yes</span>' : 'No' ?></td></tr>
+                    <tr><td class="text-muted">Offers</td><td><strong><?= count($offers) ?></strong> from <?= count(array_unique(array_column($offers, 'supplier_code'))) ?> suppliers</td></tr>
+                </table>
+            </div>
+            <?php if (!empty($allSpecs)): ?>
+            <div class="col-md-6">
+                <?php $firstSpecs = reset($allSpecs); ?>
+                <table class="table table-sm">
+                    <?php $si = 0; foreach ($firstSpecs as $k => $v): if ($si++ > 8) break; ?>
+                        <tr><td class="text-muted" style="width:45%"><?= esc($k) ?></td><td><?= esc($v) ?></td></tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
     </div>
-    <div class="col-md-4">
-        <?php
-        $firstOffer = $offers[0] ?? null;
-        if ($firstOffer) {
-            $raw = json_decode($firstOffer['raw_data_json'] ?? '{}', true);
-            $imgs = $raw['images'] ?? [];
-            if (!empty($imgs[0])): ?>
-                <img src="<?= esc($imgs[0]) ?>" class="img-fluid rounded" style="max-height: 200px;" alt="">
-            <?php endif;
-        } ?>
+
+    <!-- Image Gallery -->
+    <div class="col-md-5">
+        <?php if (!empty($allImages)): ?>
+        <div id="gallery-main" class="mb-2 text-center bg-light rounded p-2" style="height:280px;display:flex;align-items:center;justify-content:center;">
+            <img id="gallery-img" src="<?= esc(array_key_first($allImages)) ?>" class="img-fluid rounded" style="max-height:270px;cursor:pointer;" onclick="window.open(this.src,'_blank')">
+        </div>
+        <div class="d-flex flex-wrap gap-1">
+            <?php foreach ($allImages as $imgUrl => $supCode): ?>
+                <img src="<?= esc($imgUrl) ?>" class="rounded border" style="width:54px;height:54px;object-fit:cover;cursor:pointer;"
+                     onclick="document.getElementById('gallery-img').src=this.src"
+                     title="<?= esc($supCode) ?>">
+            <?php endforeach; ?>
+        </div>
+        <?php else: ?>
+            <div class="bg-light rounded d-flex align-items-center justify-content-center" style="height:200px">
+                <span class="text-muted">No images</span>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
-<h5>Supplier Offers (<?= count($offers) ?>)</h5>
-<table class="table table-sm table-hover">
-    <thead><tr><th>Supplier</th><th>Price</th><th>Regular</th><th>Currency</th><th>Availability</th><th>Stock</th><th>Last Seen</th><th>Active</th><th>URL</th></tr></thead>
-    <tbody>
-    <?php foreach ($offers as $i => $o): ?>
-        <tr class="<?= $i === 0 && count($offers) > 1 ? 'table-success' : '' ?>">
-            <td><strong><?= esc($o['supplier_code']) ?></strong></td>
-            <td><strong><?= $o['price_purchase'] !== null ? number_format((float)$o['price_purchase'], 2) : '—' ?></strong></td>
-            <td><?= $o['price_regular'] !== null ? number_format((float)$o['price_regular'], 2) : '—' ?></td>
-            <td><?= esc($o['currency']) ?></td>
-            <td><?= badge($o['availability'] ?? 'unknown') ?></td>
-            <td><small><?= esc($o['stock_qty_text'] ?? '') ?></small></td>
-            <td><?= time_ago($o['last_seen_at']) ?></td>
-            <td><?= $o['is_active'] ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>' ?></td>
-            <td><?php if ($o['url']): ?><a href="<?= esc($o['url']) ?>" target="_blank" class="btn btn-outline-primary btn-xs">Open</a><?php endif; ?></td>
-        </tr>
-    <?php endforeach; ?>
-    </tbody>
-</table>
+<!-- Price History Chart -->
+<?php if (!empty($chartData)): ?>
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-graph-up"></i> Price History</strong>
+        <div>
+            <?php $ci = 0; foreach ($chartData as $code => $d): ?>
+                <span class="badge" style="background:<?= $chartColors[$ci % count($chartColors)] ?>"><?= esc($code) ?></span>
+            <?php $ci++; endforeach; ?>
+        </div>
+    </div>
+    <div class="card-body" style="height:320px">
+        <canvas id="priceChart"></canvas>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+    const datasets = [];
+    <?php $ci = 0; foreach ($chartData as $code => $d): ?>
+    datasets.push({
+        label: '<?= esc($code) ?> (purchase)',
+        data: <?= json_encode(array_map(fn($l, $p) => ['x' => $l, 'y' => $p], $d['labels'], $d['prices'])) ?>,
+        borderColor: '<?= $chartColors[$ci % count($chartColors)] ?>',
+        backgroundColor: '<?= $chartColors[$ci % count($chartColors)] ?>22',
+        fill: false,
+        tension: 0.3,
+        pointRadius: 3,
+    });
+    datasets.push({
+        label: '<?= esc($code) ?> (regular)',
+        data: <?= json_encode(array_map(fn($l, $p) => ['x' => $l, 'y' => $p], $d['labels'], $d['regular'])) ?>,
+        borderColor: '<?= $chartColors[$ci % count($chartColors)] ?>88',
+        borderDash: [5,5],
+        fill: false,
+        tension: 0.3,
+        pointRadius: 0,
+    });
+    <?php $ci++; endforeach; ?>
 
+    new Chart(document.getElementById('priceChart'), {
+        type: 'line',
+        data: { datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: false },
+            scales: {
+                x: { type: 'category', title: { display: true, text: 'Date' }, ticks: { maxTicksLimit: 15, maxRotation: 45 } },
+                y: { title: { display: true, text: 'Price' }, beginAtZero: false }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2)
+                    }
+                }
+            }
+        }
+    });
+})();
+</script>
+<?php endif; ?>
+
+<!-- Supplier Offers Table -->
+<div class="card mb-4">
+    <div class="card-header"><strong>Supplier Offers (<?= count($offers) ?>)</strong></div>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr>
+                <th></th><th>Supplier</th><th>Purchase Price</th><th>Regular Price</th><th>Currency</th>
+                <th>Availability</th><th>Stock</th><th>Last Seen</th><th>Last Price Check</th><th>Active</th><th></th>
+            </tr></thead>
+            <tbody>
+            <?php foreach ($offers as $i => $o): ?>
+                <tr class="<?= $i === 0 && count($offers) > 1 ? 'table-success' : '' ?>">
+                    <td><?= $i === 0 && count($offers) > 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : '' ?></td>
+                    <td><strong><?= esc($o['supplier_name']) ?></strong> <small class="text-muted"><?= esc($o['supplier_code']) ?></small></td>
+                    <td><strong><?= $o['price_purchase'] !== null ? number_format((float)$o['price_purchase'], 2) : '—' ?></strong></td>
+                    <td class="text-muted"><?= $o['price_regular'] !== null ? number_format((float)$o['price_regular'], 2) : '—' ?></td>
+                    <td><?= esc($o['currency']) ?></td>
+                    <td><?= badge($o['availability'] ?? 'unknown') ?></td>
+                    <td><small><?= esc($o['stock_qty_text'] ?? '') ?></small></td>
+                    <td><?= time_ago($o['last_seen_at']) ?></td>
+                    <td><?= time_ago($o['last_price_check_at']) ?></td>
+                    <td><?= $o['is_active'] ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>' ?></td>
+                    <td><?php if ($o['url']): ?><a href="<?= esc($o['url']) ?>" target="_blank" class="btn btn-outline-primary btn-xs"><i class="bi bi-box-arrow-up-right"></i></a><?php endif; ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Price History Table -->
 <?php if (!empty($history)): ?>
-<h5 class="mt-4">Price History</h5>
-<table class="table table-sm">
-    <thead><tr><th>Date</th><th>Supplier</th><th>Purchase</th><th>Regular</th><th>Availability</th><th>Active</th></tr></thead>
-    <tbody>
-    <?php foreach ($history as $h): ?>
-        <tr>
-            <td><?= esc($h['checked_at']) ?></td>
-            <td><code><?= esc($h['supplier_code']) ?></code></td>
-            <td><?= $h['price_purchase'] !== null ? number_format((float)$h['price_purchase'], 2) : '—' ?></td>
-            <td><?= $h['price_regular'] !== null ? number_format((float)$h['price_regular'], 2) : '—' ?></td>
-            <td><?= esc($h['availability'] ?? '') ?></td>
-            <td><?= $h['is_active'] ? 'Yes' : 'No' ?></td>
-        </tr>
-    <?php endforeach; ?>
-    </tbody>
-</table>
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between">
+        <strong>Price History Log (<?= count($history) ?> records)</strong>
+        <a href="<?= url('price_history', ['product_id' => $id, 'export' => 'csv']) ?>" class="btn btn-outline-success btn-xs"><i class="bi bi-download"></i> CSV</a>
+    </div>
+    <div class="table-responsive" style="max-height:400px;overflow-y:auto">
+        <table class="table table-sm mb-0">
+            <thead class="sticky-top bg-white"><tr><th>Date</th><th>Supplier</th><th>Purchase</th><th>Regular</th><th>Change</th><th>Availability</th><th>Active</th></tr></thead>
+            <tbody>
+            <?php
+            $prevPrices = [];
+            foreach (array_reverse($history) as $h):
+                $code = $h['supplier_code'];
+                $price = (float)$h['price_purchase'];
+                $change = '';
+                if (isset($prevPrices[$code]) && $prevPrices[$code] != $price) {
+                    $diff = $price - $prevPrices[$code];
+                    $pct = $prevPrices[$code] > 0 ? ($diff / $prevPrices[$code]) * 100 : 0;
+                    $arrow = $diff < 0 ? '<i class="bi bi-arrow-down-circle text-success"></i>' : '<i class="bi bi-arrow-up-circle text-danger"></i>';
+                    $change = $arrow . ' ' . sprintf('%+.2f (%.1f%%)', $diff, $pct);
+                }
+                $prevPrices[$code] = $price;
+            ?>
+                <tr>
+                    <td><small><?= esc($h['checked_at']) ?></small></td>
+                    <td><code><?= esc($code) ?></code></td>
+                    <td><?= number_format($price, 2) ?></td>
+                    <td class="text-muted"><?= $h['price_regular'] !== null ? number_format((float)$h['price_regular'], 2) : '—' ?></td>
+                    <td><small><?= $change ?></small></td>
+                    <td><?= badge($h['availability'] ?? 'unknown') ?></td>
+                    <td><?= $h['is_active'] ? '<i class="bi bi-check text-success"></i>' : '<i class="bi bi-x text-danger"></i>' ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Full Specifications -->
+<?php if (!empty($allSpecs)): ?>
+<div class="card mb-4">
+    <div class="card-header"><strong>Specifications</strong></div>
+    <div class="card-body">
+        <?php if (count($allSpecs) > 1): ?>
+            <ul class="nav nav-tabs mb-3" role="tablist">
+                <?php $ti = 0; foreach ($allSpecs as $code => $specs): ?>
+                    <li class="nav-item"><a class="nav-link <?= $ti === 0 ? 'active' : '' ?>" data-bs-toggle="tab" href="#specs-<?= esc($code) ?>"><?= esc($code) ?></a></li>
+                <?php $ti++; endforeach; ?>
+            </ul>
+        <?php endif; ?>
+        <div class="tab-content">
+            <?php $ti = 0; foreach ($allSpecs as $code => $specs): ?>
+            <div class="tab-pane <?= $ti === 0 ? 'show active' : '' ?>" id="specs-<?= esc($code) ?>">
+                <table class="table table-sm" style="max-width:600px">
+                    <?php foreach ($specs as $k => $v): ?>
+                        <tr><td class="text-muted" style="width:40%"><?= esc($k) ?></td><td><?= esc($v) ?></td></tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <?php $ti++; endforeach; ?>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Description -->
+<?php
+$descriptions = [];
+foreach ($offers as $o) {
+    $raw = json_decode($o['raw_data_json'] ?? '{}', true);
+    $desc = $raw['description'] ?? '';
+    if (!empty($desc) && mb_strlen($desc) > 30) {
+        $descriptions[$o['supplier_code']] = $desc;
+    }
+}
+if (!empty($descriptions)): ?>
+<div class="card mb-4">
+    <div class="card-header"><strong>Description</strong></div>
+    <div class="card-body">
+        <?php if (count($descriptions) > 1): ?>
+            <ul class="nav nav-tabs mb-3" role="tablist">
+                <?php $di = 0; foreach ($descriptions as $code => $desc): ?>
+                    <li class="nav-item"><a class="nav-link <?= $di === 0 ? 'active' : '' ?>" data-bs-toggle="tab" href="#desc-<?= esc($code) ?>"><?= esc($code) ?></a></li>
+                <?php $di++; endforeach; ?>
+            </ul>
+        <?php endif; ?>
+        <div class="tab-content">
+            <?php $di = 0; foreach ($descriptions as $code => $desc): ?>
+            <div class="tab-pane <?= $di === 0 ? 'show active' : '' ?>" id="desc-<?= esc($code) ?>">
+                <p style="white-space:pre-line"><?= esc($desc) ?></p>
+            </div>
+            <?php $di++; endforeach; ?>
+        </div>
+    </div>
+</div>
 <?php endif; ?>

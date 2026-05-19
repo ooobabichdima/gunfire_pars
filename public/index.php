@@ -21,17 +21,21 @@ if (!$auth->isAuthenticated()) {
 }
 
 $pages = [
-    'dashboard'     => ['file' => 'dashboard.php',     'title' => 'Dashboard'],
-    'suppliers'     => ['file' => 'suppliers.php',      'title' => 'Suppliers'],
-    'supplier_edit' => ['file' => 'supplier_edit.php',  'title' => 'Edit Supplier'],
-    'schedules'     => ['file' => 'schedules.php',      'title' => 'Schedules'],
-    'queue'         => ['file' => 'queue.php',          'title' => 'Parse Queue'],
-    'catalog'       => ['file' => 'catalog.php',        'title' => 'Catalog'],
-    'product'       => ['file' => 'product_detail.php', 'title' => 'Product'],
-    'prices'        => ['file' => 'prices.php',         'title' => 'Price Comparison'],
-    'jobs'          => ['file' => 'jobs.php',           'title' => 'Job Runs'],
-    'logs'          => ['file' => 'logs.php',           'title' => 'Logs'],
-    'settings'      => ['file' => 'settings.php',       'title' => 'Settings'],
+    'dashboard'      => ['file' => 'dashboard.php',      'title' => 'Dashboard'],
+    'suppliers'      => ['file' => 'suppliers.php',       'title' => 'Suppliers'],
+    'supplier_edit'  => ['file' => 'supplier_edit.php',   'title' => 'Edit Supplier'],
+    'schedules'      => ['file' => 'schedules.php',       'title' => 'Schedules'],
+    'queue'          => ['file' => 'queue.php',           'title' => 'Parse Queue'],
+    'catalog'        => ['file' => 'catalog.php',         'title' => 'Catalog'],
+    'product'        => ['file' => 'product_detail.php',  'title' => 'Product'],
+    'offers'         => ['file' => 'offers.php',          'title' => 'All Offers'],
+    'prices'         => ['file' => 'prices.php',          'title' => 'Price Comparison'],
+    'price_history'  => ['file' => 'price_history.php',   'title' => 'Price History'],
+    'alerts'         => ['file' => 'alerts.php',          'title' => 'Alerts'],
+    'analytics'      => ['file' => 'analytics.php',       'title' => 'Analytics'],
+    'jobs'           => ['file' => 'jobs.php',            'title' => 'Job Runs'],
+    'logs'           => ['file' => 'logs.php',            'title' => 'Logs'],
+    'settings'       => ['file' => 'settings.php',        'title' => 'Settings'],
 ];
 
 if (!isset($pages[$page])) {

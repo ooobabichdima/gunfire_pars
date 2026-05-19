@@ -127,6 +127,7 @@ final class OfferUpdater
 
         if ($priceChanged) {
             $this->recordPriceHistory($offer['id'], $priceData, true);
+            $this->generateAlerts($offer, $priceData);
             $stats['updated']++;
             $this->logger->info("Price updated for offer #{$offer['id']}: {$offer['price_purchase']} → {$priceData['price_purchase']}");
         } else {
@@ -145,5 +146,81 @@ final class OfferUpdater
             'is_active'         => $isActive ? 1 : 0,
             'checked_at'        => date('Y-m-d H:i:s'),
         ]);
+    }
+
+    private function generateAlerts(array $offer, array $priceData): void
+    {
+        try {
+            $oldPrice = (float)($offer['price_purchase'] ?? 0);
+            $newPrice = (float)($priceData['price_purchase'] ?? 0);
+            $oldAvail = $offer['availability'] ?? '';
+            $newAvail = $priceData['availability'] ?? '';
+
+            $supplierId = (int)($offer['supplier_id'] ?? 0);
+            $catalogId = !empty($offer['catalog_product_id']) ? (int)$offer['catalog_product_id'] : null;
+            $offerName = mb_substr($offer['name'] ?? "Offer #{$offer['id']}", 0, 80);
+
+            // Price drop > 5%
+            if ($oldPrice > 0 && $newPrice > 0 && $newPrice < $oldPrice) {
+                $dropPct = (($oldPrice - $newPrice) / $oldPrice) * 100;
+                if ($dropPct >= 5) {
+                    $this->db->insert('price_alerts', [
+                        'catalog_product_id' => $catalogId,
+                        'supplier_id'        => $supplierId,
+                        'alert_type'         => 'price_drop',
+                        'threshold_percent'  => round($dropPct, 2),
+                        'old_value'          => number_format($oldPrice, 2),
+                        'new_value'          => number_format($newPrice, 2),
+                        'message'            => "{$offerName}: price dropped " . round($dropPct, 1) . "%",
+                        'created_at'         => date('Y-m-d H:i:s'),
+                    ]);
+                }
+            }
+
+            // Price increase > 10%
+            if ($oldPrice > 0 && $newPrice > 0 && $newPrice > $oldPrice) {
+                $incPct = (($newPrice - $oldPrice) / $oldPrice) * 100;
+                if ($incPct >= 10) {
+                    $this->db->insert('price_alerts', [
+                        'catalog_product_id' => $catalogId,
+                        'supplier_id'        => $supplierId,
+                        'alert_type'         => 'price_increase',
+                        'threshold_percent'  => round($incPct, 2),
+                        'old_value'          => number_format($oldPrice, 2),
+                        'new_value'          => number_format($newPrice, 2),
+                        'message'            => "{$offerName}: price increased " . round($incPct, 1) . "%",
+                        'created_at'         => date('Y-m-d H:i:s'),
+                    ]);
+                }
+            }
+
+            // Out of stock
+            if ($oldAvail === 'in_stock' && $newAvail === 'out_of_stock') {
+                $this->db->insert('price_alerts', [
+                    'catalog_product_id' => $catalogId,
+                    'supplier_id'        => $supplierId,
+                    'alert_type'         => 'out_of_stock',
+                    'old_value'          => $oldAvail,
+                    'new_value'          => $newAvail,
+                    'message'            => "{$offerName}: went out of stock",
+                    'created_at'         => date('Y-m-d H:i:s'),
+                ]);
+            }
+
+            // Back in stock
+            if ($oldAvail === 'out_of_stock' && $newAvail === 'in_stock') {
+                $this->db->insert('price_alerts', [
+                    'catalog_product_id' => $catalogId,
+                    'supplier_id'        => $supplierId,
+                    'alert_type'         => 'back_in_stock',
+                    'old_value'          => $oldAvail,
+                    'new_value'          => $newAvail,
+                    'message'            => "{$offerName}: back in stock",
+                    'created_at'         => date('Y-m-d H:i:s'),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            $this->logger->debug("Alert generation failed: {$e->getMessage()}");
+        }
     }
 }

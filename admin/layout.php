@@ -27,16 +27,23 @@
         <a href="<?= url('dashboard') ?>" class="text-white text-decoration-none mb-3">
             <strong><i class="bi bi-box-seam"></i> Aggregator</strong>
         </a>
+        <?php $unreadAlerts = (int)($db->fetchColumn("SELECT COUNT(*) FROM price_alerts WHERE is_read = 0") ?? 0); ?>
         <ul class="nav flex-column">
             <li><a class="nav-link <?= is_page('dashboard') ? 'active' : '' ?>" href="<?= url('dashboard') ?>"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
             <li><a class="nav-link <?= is_page('suppliers') || is_page('supplier_edit') ? 'active' : '' ?>" href="<?= url('suppliers') ?>"><i class="bi bi-truck"></i> Suppliers</a></li>
             <li><a class="nav-link <?= is_page('schedules') ? 'active' : '' ?>" href="<?= url('schedules') ?>"><i class="bi bi-clock-history"></i> Schedules</a></li>
             <li><a class="nav-link <?= is_page('queue') ? 'active' : '' ?>" href="<?= url('queue') ?>"><i class="bi bi-list-task"></i> Queue</a></li>
-            <li><a class="nav-link <?= is_page('catalog') ? 'active' : '' ?>" href="<?= url('catalog') ?>"><i class="bi bi-grid-3x3-gap"></i> Catalog</a></li>
+            <li class="mt-2"><small class="text-muted px-3">DATA</small></li>
+            <li><a class="nav-link <?= is_page('catalog') || is_page('product') ? 'active' : '' ?>" href="<?= url('catalog') ?>"><i class="bi bi-grid-3x3-gap"></i> Catalog</a></li>
+            <li><a class="nav-link <?= is_page('offers') ? 'active' : '' ?>" href="<?= url('offers') ?>"><i class="bi bi-tags"></i> Offers</a></li>
             <li><a class="nav-link <?= is_page('prices') ? 'active' : '' ?>" href="<?= url('prices') ?>"><i class="bi bi-currency-exchange"></i> Prices</a></li>
+            <li><a class="nav-link <?= is_page('price_history') ? 'active' : '' ?>" href="<?= url('price_history') ?>"><i class="bi bi-graph-up"></i> Price History</a></li>
+            <li><a class="nav-link <?= is_page('alerts') ? 'active' : '' ?>" href="<?= url('alerts') ?>"><i class="bi bi-bell"></i> Alerts <?php if ($unreadAlerts > 0): ?><span class="badge bg-danger rounded-pill"><?= $unreadAlerts ?></span><?php endif; ?></a></li>
+            <li><a class="nav-link <?= is_page('analytics') ? 'active' : '' ?>" href="<?= url('analytics') ?>"><i class="bi bi-bar-chart-line"></i> Analytics</a></li>
+            <li class="mt-2"><small class="text-muted px-3">SYSTEM</small></li>
             <li><a class="nav-link <?= is_page('jobs') ? 'active' : '' ?>" href="<?= url('jobs') ?>"><i class="bi bi-play-circle"></i> Jobs</a></li>
             <li><a class="nav-link <?= is_page('logs') ? 'active' : '' ?>" href="<?= url('logs') ?>"><i class="bi bi-journal-text"></i> Logs</a></li>
-            <li class="mt-3"><a class="nav-link <?= is_page('settings') ? 'active' : '' ?>" href="<?= url('settings') ?>"><i class="bi bi-gear"></i> Settings</a></li>
+            <li><a class="nav-link <?= is_page('settings') ? 'active' : '' ?>" href="<?= url('settings') ?>"><i class="bi bi-gear"></i> Settings</a></li>
             <li><a class="nav-link text-danger" href="<?= url('login') ?>&action=logout"><i class="bi bi-box-arrow-left"></i> Logout</a></li>
         </ul>
     </div>
