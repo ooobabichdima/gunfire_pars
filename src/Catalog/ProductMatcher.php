@@ -9,7 +9,7 @@ use App\Logger;
 
 final class ProductMatcher
 {
-    private const FUZZY_THRESHOLD = 0.75;
+    private const FUZZY_THRESHOLD = 0.85;
 
     private Database $db;
     private Logger $logger;
@@ -22,13 +22,9 @@ final class ProductMatcher
         $this->normalizer = $normalizer;
     }
 
-    /**
-     * Find or create a catalog_product for the given offer data.
-     * Returns catalog_product_id.
-     */
     public function matchOrCreate(array $offerData): int
     {
-        // Step 1: Match by EAN
+        // Step 1: Match by EAN (exact, reliable)
         if (!empty($offerData['ean'])) {
             $match = $this->matchByEan($offerData['ean']);
             if ($match) {
@@ -37,7 +33,7 @@ final class ProductMatcher
             }
         }
 
-        // Step 2: Match by SKU
+        // Step 2: Match by SKU (exact)
         if (!empty($offerData['external_sku'])) {
             $match = $this->matchBySku($offerData['external_sku']);
             if ($match) {
@@ -46,9 +42,9 @@ final class ProductMatcher
             }
         }
 
-        // Step 3: Match by brand + model
         $normalized = $this->normalizer->normalize($offerData['name'] ?? '', $offerData['brand'] ?? '');
 
+        // Step 3: Match by brand + FULL model (exact model match only)
         if (!empty($normalized['brand']) && !empty($normalized['model'])) {
             $match = $this->matchByBrandModel($normalized['brand'], $normalized['model']);
             if ($match) {
@@ -57,9 +53,9 @@ final class ProductMatcher
             }
         }
 
-        // Step 4: Fuzzy match by normalized_name
+        // Step 4: Fuzzy match by normalized_name (with model guard)
         if (!empty($normalized['normalized_name'])) {
-            $match = $this->matchByFuzzyName($normalized['normalized_name'], $normalized['brand']);
+            $match = $this->matchByFuzzyName($normalized['normalized_name'], $normalized['brand'], $normalized['model']);
             if ($match) {
                 $this->logger->debug("Matched by fuzzy name → catalog #{$match}");
                 return $match;
@@ -70,9 +66,6 @@ final class ProductMatcher
         return $this->createCatalogProduct($offerData, $normalized);
     }
 
-    /**
-     * Try to match all unmatched offers.
-     */
     public function matchUnlinked(int $limit = 500, int $offset = 0): array
     {
         $offers = $this->db->fetchAll(
@@ -89,7 +82,6 @@ final class ProductMatcher
         foreach ($offers as $offer) {
             $catalogId = $this->matchOrCreate($offer);
 
-            // Check if we matched existing or just created
             $this->db->update(
                 'supplier_offers',
                 ['catalog_product_id' => $catalogId, 'updated_at' => date('Y-m-d H:i:s')],
@@ -134,23 +126,21 @@ final class ProductMatcher
         return $row ? (int)$row['id'] : null;
     }
 
-    private function matchByFuzzyName(string $normalizedName, string $brand = ''): ?int
+    private function matchByFuzzyName(string $normalizedName, string $brand = '', string $offerModel = ''): ?int
     {
-        // Narrow candidates by brand if available
         if (!empty($brand)) {
             $candidates = $this->db->fetchAll(
-                'SELECT id, normalized_name FROM catalog_products WHERE brand = ? LIMIT 200',
+                'SELECT id, normalized_name, model FROM catalog_products WHERE brand = ? LIMIT 200',
                 [$brand]
             );
         } else {
-            // Use LIKE with first significant word
             $words = explode(' ', $normalizedName);
             $firstWord = $words[0] ?? '';
             if (mb_strlen($firstWord) < 3) {
                 return null;
             }
             $candidates = $this->db->fetchAll(
-                'SELECT id, normalized_name FROM catalog_products WHERE normalized_name LIKE ? LIMIT 200',
+                'SELECT id, normalized_name, model FROM catalog_products WHERE normalized_name LIKE ? LIMIT 200',
                 [$firstWord . '%']
             );
         }
@@ -159,6 +149,14 @@ final class ProductMatcher
         $bestScore = 0.0;
 
         foreach ($candidates as $candidate) {
+            // MODEL GUARD: if both have model numbers and they differ → skip
+            $candidateModel = $candidate['model'] ?? '';
+            if (!empty($offerModel) && !empty($candidateModel)) {
+                if (!$this->modelsCompatible($offerModel, $candidateModel)) {
+                    continue;
+                }
+            }
+
             $score = $this->normalizer->similarity($normalizedName, $candidate['normalized_name']);
             if ($score > $bestScore) {
                 $bestScore = $score;
@@ -171,6 +169,55 @@ final class ProductMatcher
         }
 
         return null;
+    }
+
+    /**
+     * Check if two model identifiers are compatible (same product).
+     * SA-E25 vs SA-E25 → true (same)
+     * SA-E25 vs SA-E24 → false (different models)
+     * SA-E17 vs SA-E17 → true
+     * M4A1 vs M4A1 → true
+     * M4A1 vs M16A4 → false
+     */
+    private function modelsCompatible(string $a, string $b): bool
+    {
+        $a = strtoupper(trim($a));
+        $b = strtoupper(trim($b));
+
+        if ($a === $b) {
+            return true;
+        }
+
+        // Normalize separators
+        $normA = preg_replace('/[\-_\.\s]+/', '', $a);
+        $normB = preg_replace('/[\-_\.\s]+/', '', $b);
+
+        if ($normA === $normB) {
+            return true;
+        }
+
+        // If they contain digits and the digit parts differ → different models
+        $digitsA = preg_replace('/[^\d]/', '', $a);
+        $digitsB = preg_replace('/[^\d]/', '', $b);
+        if (!empty($digitsA) && !empty($digitsB) && $digitsA !== $digitsB) {
+            return false;
+        }
+
+        // If letter+number combos differ → different
+        // E25 vs E24, E17 vs E18, etc.
+        preg_match_all('/[A-Z]+\d+/', $a, $partsA);
+        preg_match_all('/[A-Z]+\d+/', $b, $partsB);
+        if (!empty($partsA[0]) && !empty($partsB[0])) {
+            $setA = $partsA[0];
+            $setB = $partsB[0];
+            sort($setA);
+            sort($setB);
+            if ($setA !== $setB) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // ==================================================================
