@@ -2,6 +2,26 @@
 
 declare(strict_types=1);
 
+function t(string $key): string
+{
+    return $GLOBALS['_lang'][$key] ?? $key;
+}
+
+function currentLang(): string
+{
+    return $GLOBALS['_currentLang'] ?? 'uk';
+}
+
+function langSwitcher(): string
+{
+    $current = currentLang();
+    $other = $current === 'uk' ? 'en' : 'uk';
+    $label = $current === 'uk' ? 'EN' : 'UA';
+    $currentUrl = $_SERVER['REQUEST_URI'];
+    $separator = str_contains($currentUrl, '?') ? '&' : '?';
+    return '<a href="' . esc($currentUrl . $separator . 'lang=' . $other) . '" class="text-light text-decoration-none small">' . $label . '</a>';
+}
+
 function csrf_field(): string
 {
     return '<input type="hidden" name="_csrf" value="' . esc($_SESSION['csrf_token'] ?? '') . '">';

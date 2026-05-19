@@ -20,8 +20,8 @@ $products = $db->fetchAll(
      FROM catalog_products cp
      JOIN supplier_offers so ON so.catalog_product_id = cp.id AND so.is_active = 1 AND so.price_purchase IS NOT NULL
      JOIN suppliers s ON s.id = so.supplier_id
-     GROUP BY cp.id HAVING supplier_count > 1
-     ORDER BY (max_price - min_price) DESC
+     GROUP BY cp.id HAVING COUNT(DISTINCT so.supplier_id) > 1
+     ORDER BY (MAX(so.price_purchase) - MIN(so.price_purchase)) DESC
      LIMIT {$perPage} OFFSET {$offset}"
 );
 

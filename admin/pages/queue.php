@@ -94,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 <td><?= $item['id'] ?></td>
                 <td><code><?= esc($item['supplier_code'] ?? '') ?></code></td>
                 <td><?= badge($item['type']) ?></td>
-                <td><small title="<?= esc($item['url']) ?>"><?= esc(mb_substr($item['url'], 0, 60)) ?></small></td>
+                <td><a href="<?= esc($item['url']) ?>" target="_blank" class="text-decoration-none" title="<?= esc($item['url']) ?>"><small><?= esc(mb_substr($item['url'], 0, 60)) ?></small> <i class="bi bi-box-arrow-up-right" style="font-size:.65rem"></i></a></td>
                 <td><?= badge($item['status']) ?></td>
                 <td><?= $item['retry_count'] ?>/<?= $item['max_retries'] ?></td>
                 <td><small class="text-danger"><?= esc(mb_substr($item['error_message'] ?? '', 0, 50)) ?></small></td>

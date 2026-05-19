@@ -18,3 +18,11 @@ require_once __DIR__ . '/helpers.php';
 if (!isset($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+
+// Language
+if (isset($_GET['lang']) && in_array($_GET['lang'], ['uk', 'en'])) {
+    $_SESSION['lang'] = $_GET['lang'];
+}
+$currentLang = $_SESSION['lang'] ?? 'uk';
+$GLOBALS['_lang'] = require __DIR__ . '/lang/' . $currentLang . '.php';
+$GLOBALS['_currentLang'] = $currentLang;
