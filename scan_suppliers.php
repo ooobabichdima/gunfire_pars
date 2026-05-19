@@ -57,6 +57,9 @@ if (!$lock->acquire()) {
 $db = Database::getInstance($config['db']);
 $proxyManager = new ProxyManager($logger, $config['log']['dir']);
 $proxyManager->load();
+foreach ($config['http']['custom_proxies'] ?? [] as $cp) { $proxyManager->addProxy($cp); }
+$supplierRow = $db->fetchOne("SELECT config_json FROM suppliers WHERE code = ?", [$supplierCode]);
+foreach (json_decode($supplierRow['config_json'] ?? '{}', true)['proxies'] ?? [] as $cp) { $proxyManager->addProxy($cp); }
 $http = new HttpClient($config['http'], $logger, $proxyManager);
 $queue = new QueueManager($db, $logger);
 

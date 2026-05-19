@@ -60,7 +60,17 @@ $proxyManager = null;
 if ($useProxy) {
     $proxyManager = new ProxyManager($logger, $config['log']['dir']);
     $proxyManager->load();
-    $logger->console("Proxies loaded: " . $proxyManager->getWorkingCount() . " working");
+    // Add paid/custom proxies from config (highest priority)
+    foreach ($config['http']['custom_proxies'] ?? [] as $customProxy) {
+        $proxyManager->addProxy($customProxy);
+    }
+    // Add paid proxies from supplier config_json
+    $supplierRow = $db->fetchOne("SELECT config_json FROM suppliers WHERE code = ?", [$supplierCode]);
+    $supplierCfg = json_decode($supplierRow['config_json'] ?? '{}', true) ?: [];
+    foreach ($supplierCfg['proxies'] ?? [] as $customProxy) {
+        $proxyManager->addProxy($customProxy);
+    }
+    $logger->console("Proxies: " . $proxyManager->getWorkingCount() . " working");
 }
 $http = new HttpClient($config['http'], $logger, $proxyManager);
 $queue = new QueueManager($db, $logger);
