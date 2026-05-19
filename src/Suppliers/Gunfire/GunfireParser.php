@@ -137,6 +137,12 @@ final class GunfireParser extends AbstractSupplierParser
             return null;
         }
 
+        // Validate we got a real product page, not an error/captcha/blocked page
+        if (!$this->isValidProductPage($html)) {
+            $this->logger->warning("Not a valid product page (blocked/error): {$url}");
+            return null;
+        }
+
         $crawler = $this->createCrawler($html);
         $data = [];
 
@@ -144,8 +150,8 @@ final class GunfireParser extends AbstractSupplierParser
         $data['url'] = $url;
 
         $data['name'] = $this->parseName($crawler, $html);
-        if (empty($data['name'])) {
-            $this->logger->warning("Could not extract product name: {$url}");
+        if (empty($data['name']) || !$this->isValidProductName($data['name'])) {
+            $this->logger->warning("Invalid product name '{$data['name']}': {$url}");
             return null;
         }
 
@@ -367,6 +373,73 @@ final class GunfireParser extends AbstractSupplierParser
     {
         $base = $this->getBaseUrl();
         return array_map(fn(string $path) => $base . $path, self::KNOWN_CATEGORIES);
+    }
+
+    // ==================================================================
+    //  Validation
+    // ==================================================================
+
+    private function isValidProductPage(string $html): bool
+    {
+        $len = strlen($html);
+
+        // Too short = error page, captcha, or blocked response
+        if ($len < 5000) {
+            return false;
+        }
+
+        // Must contain product-related markers
+        $markers = ['/en/products/', 'gunfire', '.html'];
+        $found = 0;
+        $htmlLower = mb_strtolower($html);
+        foreach ($markers as $m) {
+            if (str_contains($htmlLower, $m)) {
+                $found++;
+            }
+        }
+        if ($found < 2) {
+            return false;
+        }
+
+        // Must NOT be a captcha/block page
+        $blockMarkers = ['captcha', 'cloudflare', 'ray id', 'access denied', 'just a moment', 'checking your browser'];
+        foreach ($blockMarkers as $bm) {
+            if (str_contains($htmlLower, $bm)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isValidProductName(string $name): bool
+    {
+        // Too short
+        if (mb_strlen($name) < 5) {
+            return false;
+        }
+
+        // Known junk names (hosting panels, JS libs, error pages)
+        $junk = [
+            'centaur', 'fastpanel', 'fwr200', 'fwr300', 'hestia',
+            'cpanel', 'plesk', 'cloudflare', 'nginx', 'apache',
+            'access denied', 'forbidden', 'not found', '404',
+            'error', 'maintenance', 'coming soon',
+            'just a moment', 'checking your browser',
+        ];
+        $lower = mb_strtolower($name);
+        foreach ($junk as $j) {
+            if (str_contains($lower, $j)) {
+                return false;
+            }
+        }
+
+        // Must contain at least one letter (not just numbers/symbols)
+        if (!preg_match('/[a-zA-Z]{2,}/', $name)) {
+            return false;
+        }
+
+        return true;
     }
 
     // ==================================================================
