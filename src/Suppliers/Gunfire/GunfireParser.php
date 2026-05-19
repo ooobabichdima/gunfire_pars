@@ -656,18 +656,78 @@ final class GunfireParser extends AbstractSupplierParser
 
     private function parseAvailability(Crawler $crawler, string $html): string
     {
-        // JSON-LD availability
+        // PRIMARY: "Add to basket" button is the ground truth on Gunfire
+        // No button = out of stock, regardless of what JSON-LD says
+        $hasAddToCart = false;
+
+        $cartSelectors = [
+            'button[name="add"]',
+            'input[name="add"]',
+            'button.add-to-cart',
+            '.add-to-cart button',
+            '[data-action="add-to-cart"]',
+            'button.add-to-basket',
+            'form[action*="cart"] button[type="submit"]',
+            'form[action*="basket"] button[type="submit"]',
+        ];
+
+        foreach ($cartSelectors as $sel) {
+            try {
+                if ($crawler->filter($sel)->count() > 0) {
+                    $hasAddToCart = true;
+                    break;
+                }
+            } catch (\Exception) {}
+        }
+
+        // Fallback: search raw HTML for add-to-cart patterns
+        if (!$hasAddToCart) {
+            $cartPatterns = [
+                'add to basket',
+                'add to cart',
+                'dodaj do koszyka',
+                'do koszyka',
+                'name="add"',
+                'add-to-cart',
+                'addToCart',
+                'add_to_cart',
+            ];
+            $htmlLower = mb_strtolower($html);
+            foreach ($cartPatterns as $pattern) {
+                if (str_contains($htmlLower, $pattern)) {
+                    $hasAddToCart = true;
+                    break;
+                }
+            }
+        }
+
+        if ($hasAddToCart) {
+            return 'in_stock';
+        }
+
+        // Check for explicit out-of-stock markers
+        $outOfStockPatterns = [
+            'out of stock', 'sold out', 'unavailable', 'not available',
+            'niedostępny', 'brak w magazynie', 'wyczerpany',
+            'notify me', 'powiadom mnie', 'check availability',
+        ];
+        $htmlLower = mb_strtolower($html);
+        foreach ($outOfStockPatterns as $pattern) {
+            if (str_contains($htmlLower, $pattern)) {
+                return 'out_of_stock';
+            }
+        }
+
+        // Secondary: JSON-LD (may be inaccurate, but better than unknown)
         $jsonAvail = $this->extractFromJsonLd($html, 'availability');
         if (!empty($jsonAvail)) {
-            if (str_contains($jsonAvail, 'InStock')) {
-                return 'in_stock';
-            }
             if (str_contains($jsonAvail, 'OutOfStock')) {
                 return 'out_of_stock';
             }
             if (str_contains($jsonAvail, 'PreOrder')) {
                 return 'preorder';
             }
+            // Don't trust InStock from JSON-LD — if button was missing, it's not in stock
         }
 
         // DOM selectors
@@ -676,35 +736,23 @@ final class GunfireParser extends AbstractSupplierParser
             '.product-availability',
             '.availability',
             '.stock-status',
-            '.in-stock',
-            '.out-of-stock',
         ];
 
         foreach ($selectors as $sel) {
             $text = $this->nodeText($crawler, $sel);
-            if (empty($text)) {
-                $content = $this->nodeAttr($crawler, $sel, 'content');
-                if (!empty($content)) {
-                    if (str_contains($content, 'InStock')) {
-                        return 'in_stock';
-                    }
-                    if (str_contains($content, 'OutOfStock')) {
-                        return 'out_of_stock';
-                    }
-                }
-            }
             if (!empty($text)) {
                 return $this->normalizeAvailability($text);
             }
+            $content = $this->nodeAttr($crawler, $sel, 'content');
+            if (!empty($content)) {
+                if (str_contains($content, 'OutOfStock')) {
+                    return 'out_of_stock';
+                }
+            }
         }
 
-        // Check for add-to-cart button as proxy for availability
-        $addToCart = $crawler->filter('button[type="submit"], .add-to-cart, [data-action="add-to-cart"], input[name="add"]');
-        if ($addToCart->count() > 0) {
-            return 'in_stock';
-        }
-
-        return 'unknown';
+        // No cart button + no clear markers = likely out of stock
+        return 'out_of_stock';
     }
 
     private function parseStockText(Crawler $crawler): string
