@@ -16,7 +16,7 @@ use App\HttpClient;
 use App\Lock;
 use App\Logger;
 use App\Queue\QueueManager;
-use App\Suppliers\Gunfire\GunfireParser;
+use App\Suppliers\SupplierParserFactory;
 
 // ---------------------------------------------------------------------------
 // CLI arguments
@@ -60,14 +60,11 @@ $queue = new QueueManager($db, $logger);
 // ---------------------------------------------------------------------------
 // Resolve parser
 // ---------------------------------------------------------------------------
-$parser = match ($supplierCode) {
-    'gunfire' => new GunfireParser($db, $http, $logger, $config['suppliers']['gunfire'] ?? []),
-    default   => null,
-};
-
-if ($parser === null) {
-    $logger->error("Unknown supplier: {$supplierCode}");
-    fwrite(STDERR, "Unknown supplier: {$supplierCode}\n");
+try {
+    $parser = SupplierParserFactory::create($supplierCode, $db, $http, $logger);
+} catch (\Throwable $e) {
+    $logger->error($e->getMessage());
+    fwrite(STDERR, $e->getMessage() . "\n");
     exit(1);
 }
 

@@ -19,7 +19,7 @@ use App\Lock;
 use App\Logger;
 use App\Services\OfferUpdater;
 use App\Services\PriceComparator;
-use App\Suppliers\Gunfire\GunfireParser;
+use App\Suppliers\SupplierParserFactory;
 
 // ---------------------------------------------------------------------------
 // CLI arguments
@@ -106,14 +106,11 @@ if (empty($supplierCode)) {
 
 $http = new HttpClient($config['http'], $logger);
 
-$parser = match ($supplierCode) {
-    'gunfire' => new GunfireParser($db, $http, $logger, $config['suppliers']['gunfire'] ?? []),
-    default   => null,
-};
-
-if ($parser === null) {
-    $logger->error("Unknown supplier: {$supplierCode}");
-    fwrite(STDERR, "Unknown supplier: {$supplierCode}\n");
+try {
+    $parser = SupplierParserFactory::create($supplierCode, $db, $http, $logger);
+} catch (\Throwable $e) {
+    $logger->error($e->getMessage());
+    fwrite(STDERR, $e->getMessage() . "\n");
     exit(1);
 }
 

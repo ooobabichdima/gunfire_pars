@@ -8,9 +8,11 @@
         "guzzlehttp/guzzle": "^7.5",
         "symfony/dom-crawler": "^6.0",
         "symfony/css-selector": "^6.0",
+        "phpoffice/phpspreadsheet": "^1.29",
         "ext-pdo": "*",
         "ext-json": "*",
-        "ext-mbstring": "*"
+        "ext-mbstring": "*",
+        "ext-posix": "*"
     },
     "autoload": {
         "psr-4": {

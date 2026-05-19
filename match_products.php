@@ -97,7 +97,7 @@ if (!empty($supplierCode)) {
         );
 
         if (($i + 1) % 100 === 0) {
-            $logger->console("  Processed {$i}/{$i + 1}...");
+            $logger->console("  Processed " . ($i + 1) . "...");
         }
     }
 

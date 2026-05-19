@@ -39,5 +39,13 @@ return [
             'locale'    => 'en',
             'currency'  => 'PLN',
         ],
+        'ibis' => [
+            'base_url'          => 'https://ibis.net.ua',
+            'locale'            => 'ua',
+            'currency'          => 'UAH',
+            'xls_base_url'      => 'https://obmen.ibis.net.ua/arm/',
+            'xls_auth_login'    => 'arm',
+            'xls_auth_password' => 'arm',
+        ],
     ],
 ];

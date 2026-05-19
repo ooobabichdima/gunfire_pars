@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# Deny access to parent directories
+RewriteRule ^\.\./ - [F,L]
+
+# Allow only index.php and api.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ index.php [QSA,L]
