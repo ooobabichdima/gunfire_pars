@@ -47,10 +47,12 @@ final class ProxyManager
     public function load(): void
     {
         if ($this->loadFromCache()) {
-            $this->logger->info("Loaded " . count($this->proxies) . " proxies from cache");
+            $working = $this->getWorkingCount();
+            $this->logger->console("[proxy] Кеш: завантажено {$working} робочих проксі (кеш " . (int)((time() - filemtime($this->cacheFile)) / 60) . " хв)");
             return;
         }
 
+        $this->logger->console("[proxy] Кеш відсутній або застарілий. Збираю свіжі проксі...");
         $this->fetchFreshProxies();
     }
 
@@ -163,10 +165,13 @@ final class ProxyManager
      */
     private function fetchFreshProxies(): void
     {
-        $this->logger->info("Fetching fresh proxy lists...");
+        $this->logger->console("[proxy] Завантаження списків проксі...");
         $rawProxies = [];
+        $sourceNum = 0;
+        $totalSources = count(self::FREE_PROXY_APIS);
 
         foreach (self::FREE_PROXY_APIS as $apiUrl) {
+            $sourceNum++;
             try {
                 $ctx = stream_context_create([
                     'http' => ['timeout' => 10, 'ignore_errors' => true],
@@ -186,17 +191,19 @@ final class ProxyManager
                     }
                 }
 
-                $this->logger->debug("Fetched " . count($lines) . " lines from " . parse_url($apiUrl, PHP_URL_HOST));
+                $host = parse_url($apiUrl, PHP_URL_HOST);
+                $found = count($lines);
+                $this->logger->console("[proxy] [{$sourceNum}/{$totalSources}] {$host}: +{$found} проксі");
 
             } catch (\Throwable $e) {
-                $this->logger->debug("Failed to fetch proxy list: {$e->getMessage()}");
+                $this->logger->console("[proxy] [{$sourceNum}/{$totalSources}] Помилка: " . mb_substr($e->getMessage(), 0, 60));
             }
         }
 
         $rawProxies = array_unique($rawProxies);
-        $this->logger->info("Collected " . count($rawProxies) . " raw proxies");
+        $this->logger->console("[proxy] Зібрано " . count($rawProxies) . " унікальних проксі");
+        $this->logger->console("[proxy] Тестування (до 50 проксі)...");
 
-        // Quick-test a sample to find working ones
         $tested = $this->quickTest($rawProxies, 50);
 
         $this->proxies = [];
@@ -208,7 +215,7 @@ final class ProxyManager
             ];
         }
 
-        $this->logger->info("Verified " . count($this->proxies) . " working proxies");
+        $this->logger->console("[proxy] Готово: " . count($this->proxies) . " робочих проксі збережено в кеш");
         $this->saveToCache();
     }
 
@@ -246,13 +253,16 @@ final class ProxyManager
                 $result = @file_get_contents($testUrl, false, $ctx);
                 if ($result !== false && str_contains($result, 'origin')) {
                     $working[] = $proxyUrl;
-                    $this->logger->debug("Proxy OK: {$proxyUrl}");
+                    fwrite(STDOUT, "\r[proxy] Тест: {$tested}/{$maxTest} | Робочих: " . count($working) . " | OK: {$proxyUrl}              ");
+                } else {
+                    fwrite(STDOUT, "\r[proxy] Тест: {$tested}/{$maxTest} | Робочих: " . count($working) . " | FAIL                                ");
                 }
             } catch (\Throwable) {
-                // Skip
+                fwrite(STDOUT, "\r[proxy] Тест: {$tested}/{$maxTest} | Робочих: " . count($working) . " | timeout                              ");
             }
         }
 
+        fwrite(STDOUT, "\n");
         return $working;
     }
 

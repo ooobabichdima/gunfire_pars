@@ -79,7 +79,8 @@ try {
     exit(1);
 }
 
-$logger->console("Starting parse for supplier: {$supplierCode} (batch: {$batchSize})");
+$startTime = microtime(true);
+$logger->console("=== Парсинг {$supplierCode} (пакет: {$batchSize}) ===");
 
 // ---------------------------------------------------------------------------
 // Process queue
@@ -87,17 +88,22 @@ $logger->console("Starting parse for supplier: {$supplierCode} (batch: {$batchSi
 $items = $queue->fetchBatch($parser->getSupplierId(), 'product', $batchSize);
 
 if (empty($items)) {
-    $logger->console("No items in queue to process.");
+    $logger->console("Черга порожня — немає елементів для обробки.");
     $lock->release();
     exit(0);
 }
 
-$logger->console("Processing " . count($items) . " items...");
+$logger->console("В черзі: " . count($items) . " товарів\n");
 
 $stats = ['parsed' => 0, 'saved' => 0, 'errors' => 0];
 
 foreach ($items as $i => $item) {
-    $logger->console(sprintf("[%d/%d] %s", $i + 1, count($items), $item['url']));
+    $itemStart = microtime(true);
+    $num = $i + 1;
+    $total = count($items);
+    $pct = round($num / $total * 100);
+
+    $logger->console(sprintf("[%d/%d %d%%] Парсинг: %s", $num, $total, $pct, mb_substr($item['url'], 0, 80)));
 
     try {
         $productData = $parser->parseProduct($item['url']);
@@ -105,6 +111,7 @@ foreach ($items as $i => $item) {
         if ($productData === null) {
             $queue->markError((int)$item['id'], 'Parse returned null — page may have changed');
             $stats['errors']++;
+            $logger->console("  ✗ Не вдалося розпарсити (null)");
             continue;
         }
 
@@ -114,22 +121,33 @@ foreach ($items as $i => $item) {
         $stats['parsed']++;
         $stats['saved']++;
 
-        $logger->debug("Saved: {$productData['name']} (ext_id: {$productData['external_id']})");
+        $elapsed = round(microtime(true) - $itemStart, 1);
+        $price = $productData['price_purchase'] !== null ? number_format((float)$productData['price_purchase'], 2) : '—';
+        $name = mb_substr($productData['name'], 0, 55);
+        $proxyInfo = '';
+        if ($proxyManager !== null) {
+            $proxyInfo = " | proxy: " . $proxyManager->getWorkingCount() . " live";
+        }
+        $logger->console("  ✓ {$name} | {$price} {$productData['currency']} | {$elapsed}s{$proxyInfo}");
 
     } catch (\Throwable $e) {
         $queue->markError((int)$item['id'], $e->getMessage());
         $stats['errors']++;
-        $logger->error("Error parsing {$item['url']}: {$e->getMessage()}");
+        $logger->console("  ✗ Помилка: " . mb_substr($e->getMessage(), 0, 80));
     }
 }
 
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
-$logger->console("\nParse complete:");
-$logger->console("  Parsed: {$stats['parsed']}");
-$logger->console("  Saved:  {$stats['saved']}");
-$logger->console("  Errors: {$stats['errors']}");
+$totalTime = round(microtime(true) - $startTime, 1);
+$avgTime = $stats['parsed'] > 0 ? round($totalTime / $stats['parsed'], 1) : 0;
+
+$logger->console("\n=== Результат ===");
+$logger->console("  Розпарсено: {$stats['parsed']}");
+$logger->console("  Збережено:  {$stats['saved']}");
+$logger->console("  Помилок:    {$stats['errors']}");
+$logger->console("  Час:        {$totalTime}с (середнє: {$avgTime}с/товар)");
 
 $queueStats = $queue->getStats($parser->getSupplierId());
 $logger->console("\nQueue status:");
