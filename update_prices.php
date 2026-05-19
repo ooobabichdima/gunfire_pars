@@ -17,6 +17,7 @@ use App\Database;
 use App\HttpClient;
 use App\Lock;
 use App\Logger;
+use App\ProxyManager;
 use App\Services\OfferUpdater;
 use App\Services\PriceComparator;
 use App\Suppliers\SupplierParserFactory;
@@ -104,7 +105,9 @@ if (empty($supplierCode)) {
     exit(1);
 }
 
-$http = new HttpClient($config['http'], $logger);
+$proxyManager = new ProxyManager($logger, $config['log']['dir']);
+$proxyManager->load();
+$http = new HttpClient($config['http'], $logger, $proxyManager);
 
 try {
     $parser = SupplierParserFactory::create($supplierCode, $db, $http, $logger);

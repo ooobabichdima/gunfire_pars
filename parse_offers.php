@@ -14,6 +14,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 use App\Database;
 use App\HttpClient;
 use App\Lock;
+use App\ProxyManager;
 use App\Logger;
 use App\Queue\QueueManager;
 use App\Suppliers\SupplierParserFactory;
@@ -21,15 +22,17 @@ use App\Suppliers\SupplierParserFactory;
 // ---------------------------------------------------------------------------
 // CLI arguments
 // ---------------------------------------------------------------------------
-$opts = getopt('', ['supplier:', 'limit:', 'offset:', 'help']);
+$opts = getopt('', ['supplier:', 'limit:', 'offset:', 'no-proxy', 'help']);
 
 if (isset($opts['help'])) {
-    echo "Usage: php parse_offers.php --supplier=gunfire [--limit=50] [--offset=0]\n";
+    echo "Usage: php parse_offers.php --supplier=gunfire [--limit=50] [--no-proxy]\n";
     echo "  --supplier   Supplier code (required)\n";
     echo "  --limit      Batch size per run (default: 50)\n";
-    echo "  --offset     Not used in queue mode\n";
+    echo "  --no-proxy   Disable proxy rotation\n";
     exit(0);
 }
+
+$useProxy = !isset($opts['no-proxy']);
 
 $supplierCode = $opts['supplier'] ?? '';
 if (empty($supplierCode)) {
@@ -53,7 +56,13 @@ if (!$lock->acquire()) {
 }
 
 $db = Database::getInstance($config['db']);
-$http = new HttpClient($config['http'], $logger);
+$proxyManager = null;
+if ($useProxy) {
+    $proxyManager = new ProxyManager($logger, $config['log']['dir']);
+    $proxyManager->load();
+    $logger->console("Proxies loaded: " . $proxyManager->getWorkingCount() . " working");
+}
+$http = new HttpClient($config['http'], $logger, $proxyManager);
 $queue = new QueueManager($db, $logger);
 
 // Reset stuck items

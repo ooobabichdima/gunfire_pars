@@ -1,0 +1,292 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+final class ProxyManager
+{
+    private Logger $logger;
+    private string $cacheFile;
+    private int $cacheTtl;
+
+    /** @var array<int, array{url: string, fails: int, lastUsed: float}> */
+    private array $proxies = [];
+    private int $currentIndex = 0;
+    private int $maxFails = 3;
+    private bool $enabled = true;
+
+    private const FREE_PROXY_APIS = [
+        'https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=yes&anonymity=all',
+        'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt',
+        'https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt',
+        'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt',
+        'https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt',
+    ];
+
+    public function __construct(Logger $logger, string $cacheDir, int $cacheTtlMinutes = 30)
+    {
+        $this->logger = $logger;
+        $this->cacheFile = rtrim($cacheDir, '/') . '/proxy_list.json';
+        $this->cacheTtl = $cacheTtlMinutes * 60;
+    }
+
+    public function isEnabled(): bool
+    {
+        return $this->enabled;
+    }
+
+    public function setEnabled(bool $enabled): void
+    {
+        $this->enabled = $enabled;
+    }
+
+    /**
+     * Load proxies from cache or fetch fresh ones.
+     */
+    public function load(): void
+    {
+        if ($this->loadFromCache()) {
+            $this->logger->info("Loaded " . count($this->proxies) . " proxies from cache");
+            return;
+        }
+
+        $this->fetchFreshProxies();
+    }
+
+    /**
+     * Get the next working proxy URL for Guzzle.
+     * Returns null if no proxies available (will use direct connection).
+     */
+    public function getNext(): ?string
+    {
+        if (!$this->enabled || empty($this->proxies)) {
+            return null;
+        }
+
+        $attempts = 0;
+        $total = count($this->proxies);
+
+        while ($attempts < $total) {
+            $this->currentIndex = ($this->currentIndex + 1) % $total;
+            $proxy = $this->proxies[$this->currentIndex];
+
+            if ($proxy['fails'] < $this->maxFails) {
+                return $proxy['url'];
+            }
+
+            $attempts++;
+        }
+
+        // All proxies exhausted — refresh
+        $this->logger->warning("All proxies exhausted, fetching fresh list");
+        $this->fetchFreshProxies();
+
+        if (!empty($this->proxies)) {
+            return $this->proxies[0]['url'];
+        }
+
+        return null;
+    }
+
+    /**
+     * Mark current proxy as failed.
+     */
+    public function markFailed(?string $proxyUrl): void
+    {
+        if ($proxyUrl === null) {
+            return;
+        }
+
+        foreach ($this->proxies as &$proxy) {
+            if ($proxy['url'] === $proxyUrl) {
+                $proxy['fails']++;
+                $this->logger->debug("Proxy failed ({$proxy['fails']}/{$this->maxFails}): {$proxyUrl}");
+                break;
+            }
+        }
+        unset($proxy);
+
+        $this->saveToCache();
+    }
+
+    /**
+     * Mark current proxy as successful (reset fail counter).
+     */
+    public function markSuccess(?string $proxyUrl): void
+    {
+        if ($proxyUrl === null) {
+            return;
+        }
+
+        foreach ($this->proxies as &$proxy) {
+            if ($proxy['url'] === $proxyUrl) {
+                $proxy['fails'] = 0;
+                $proxy['lastUsed'] = microtime(true);
+                break;
+            }
+        }
+        unset($proxy);
+    }
+
+    /**
+     * Add a custom proxy (e.g., paid ones from config).
+     */
+    public function addProxy(string $url): void
+    {
+        foreach ($this->proxies as $p) {
+            if ($p['url'] === $url) {
+                return;
+            }
+        }
+
+        // Prepend custom proxies (higher priority)
+        array_unshift($this->proxies, [
+            'url'      => $url,
+            'fails'    => 0,
+            'lastUsed' => 0.0,
+        ]);
+    }
+
+    public function getCount(): int
+    {
+        return count($this->proxies);
+    }
+
+    public function getWorkingCount(): int
+    {
+        return count(array_filter($this->proxies, fn($p) => $p['fails'] < $this->maxFails));
+    }
+
+    /**
+     * Fetch free proxy lists from multiple sources.
+     */
+    private function fetchFreshProxies(): void
+    {
+        $this->logger->info("Fetching fresh proxy lists...");
+        $rawProxies = [];
+
+        foreach (self::FREE_PROXY_APIS as $apiUrl) {
+            try {
+                $ctx = stream_context_create([
+                    'http' => ['timeout' => 10, 'ignore_errors' => true],
+                    'ssl'  => ['verify_peer' => false],
+                ]);
+                $content = @file_get_contents($apiUrl, false, $ctx);
+                if ($content === false) {
+                    continue;
+                }
+
+                $lines = preg_split('/[\r\n]+/', $content);
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    // Match IP:PORT pattern
+                    if (preg_match('/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{2,5})$/', $line, $m)) {
+                        $rawProxies[] = "http://{$m[1]}:{$m[2]}";
+                    }
+                }
+
+                $this->logger->debug("Fetched " . count($lines) . " lines from " . parse_url($apiUrl, PHP_URL_HOST));
+
+            } catch (\Throwable $e) {
+                $this->logger->debug("Failed to fetch proxy list: {$e->getMessage()}");
+            }
+        }
+
+        $rawProxies = array_unique($rawProxies);
+        $this->logger->info("Collected " . count($rawProxies) . " raw proxies");
+
+        // Quick-test a sample to find working ones
+        $tested = $this->quickTest($rawProxies, 50);
+
+        $this->proxies = [];
+        foreach ($tested as $url) {
+            $this->proxies[] = [
+                'url'      => $url,
+                'fails'    => 0,
+                'lastUsed' => 0.0,
+            ];
+        }
+
+        $this->logger->info("Verified " . count($this->proxies) . " working proxies");
+        $this->saveToCache();
+    }
+
+    /**
+     * Quick-test proxies by connecting to a fast endpoint.
+     */
+    private function quickTest(array $proxyUrls, int $maxTest = 50): array
+    {
+        $working = [];
+        $tested = 0;
+        $testUrl = 'https://httpbin.org/ip';
+
+        // Shuffle for randomness
+        shuffle($proxyUrls);
+
+        foreach ($proxyUrls as $proxyUrl) {
+            if ($tested >= $maxTest || count($working) >= 20) {
+                break;
+            }
+
+            $tested++;
+
+            try {
+                $ctx = stream_context_create([
+                    'http' => [
+                        'proxy'           => str_replace('http://', 'tcp://', $proxyUrl),
+                        'request_fulluri' => true,
+                        'timeout'         => 5,
+                        'ignore_errors'   => true,
+                        'header'          => "User-Agent: Mozilla/5.0\r\n",
+                    ],
+                    'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
+                ]);
+
+                $result = @file_get_contents($testUrl, false, $ctx);
+                if ($result !== false && str_contains($result, 'origin')) {
+                    $working[] = $proxyUrl;
+                    $this->logger->debug("Proxy OK: {$proxyUrl}");
+                }
+            } catch (\Throwable) {
+                // Skip
+            }
+        }
+
+        return $working;
+    }
+
+    private function loadFromCache(): bool
+    {
+        if (!file_exists($this->cacheFile)) {
+            return false;
+        }
+
+        $mtime = filemtime($this->cacheFile);
+        if ($mtime === false || (time() - $mtime) > $this->cacheTtl) {
+            return false;
+        }
+
+        $data = json_decode(file_get_contents($this->cacheFile), true);
+        if (!is_array($data) || empty($data)) {
+            return false;
+        }
+
+        $this->proxies = $data;
+        return true;
+    }
+
+    private function saveToCache(): void
+    {
+        $dir = dirname($this->cacheFile);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        file_put_contents(
+            $this->cacheFile,
+            json_encode($this->proxies, JSON_PRETTY_PRINT),
+            LOCK_EX
+        );
+    }
+}

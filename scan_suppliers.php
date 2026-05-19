@@ -14,6 +14,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 use App\Database;
 use App\HttpClient;
 use App\Lock;
+use App\ProxyManager;
 use App\Logger;
 use App\Queue\QueueManager;
 use App\Suppliers\SupplierParserFactory;
@@ -54,7 +55,9 @@ if (!$lock->acquire()) {
 }
 
 $db = Database::getInstance($config['db']);
-$http = new HttpClient($config['http'], $logger);
+$proxyManager = new ProxyManager($logger, $config['log']['dir']);
+$proxyManager->load();
+$http = new HttpClient($config['http'], $logger, $proxyManager);
 $queue = new QueueManager($db, $logger);
 
 // ---------------------------------------------------------------------------

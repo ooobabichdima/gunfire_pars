@@ -59,7 +59,7 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
 
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="<?= url('catalog') ?>">Catalog</a></li>
+        <li class="breadcrumb-item"><a href="<?= url('catalog') ?>"><?= t('catalog') ?></a></li>
         <li class="breadcrumb-item active">#<?= $product['id'] ?> <?= esc(mb_substr($product['name'], 0, 50)) ?></li>
     </ol>
 </nav>
@@ -70,12 +70,12 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
         <div class="row mt-3">
             <div class="col-md-6">
                 <table class="table table-sm">
-                    <tr><td class="text-muted" style="width:100px">Brand</td><td><strong><?= esc($product['brand'] ?? '—') ?></strong></td></tr>
-                    <tr><td class="text-muted">Model</td><td><code><?= esc($product['model'] ?? '—') ?></code></td></tr>
+                    <tr><td class="text-muted" style="width:100px"><?= t('brand') ?></td><td><strong><?= esc($product['brand'] ?? '—') ?></strong></td></tr>
+                    <tr><td class="text-muted"><?= t('model') ?></td><td><code><?= esc($product['model'] ?? '—') ?></code></td></tr>
                     <tr><td class="text-muted">SKU</td><td><?= esc($product['sku'] ?? '—') ?></td></tr>
                     <tr><td class="text-muted">EAN</td><td><?= esc($product['ean'] ?? '—') ?></td></tr>
-                    <tr><td class="text-muted">Bundle</td><td><?= $product['is_bundle'] ? '<span class="badge bg-info">Yes</span>' : 'No' ?></td></tr>
-                    <tr><td class="text-muted">Offers</td><td><strong><?= count($offers) ?></strong> from <?= count(array_unique(array_column($offers, 'supplier_code'))) ?> suppliers</td></tr>
+                    <tr><td class="text-muted"><?= t('bundle') ?></td><td><?= $product['is_bundle'] ? '<span class="badge bg-info">' . t('yes') . '</span>' : t('no') ?></td></tr>
+                    <tr><td class="text-muted"><?= t('supplier_offers') ?></td><td><strong><?= count($offers) ?></strong> <?= t('offers_from') ?> <?= count(array_unique(array_column($offers, 'supplier_code'))) ?> <?= t('suppliers') ?></td></tr>
                 </table>
             </div>
             <?php if (!empty($allSpecs)): ?>
@@ -106,7 +106,7 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
         </div>
         <?php else: ?>
             <div class="bg-light rounded d-flex align-items-center justify-content-center" style="height:200px">
-                <span class="text-muted">No images</span>
+                <span class="text-muted"><?= t('no_images') ?></span>
             </div>
         <?php endif; ?>
     </div>
@@ -116,7 +116,7 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
 <?php if (!empty($chartData)): ?>
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <strong><i class="bi bi-graph-up"></i> Price History</strong>
+        <strong><i class="bi bi-graph-up"></i> <?= t('price_history') ?></strong>
         <div>
             <?php $ci = 0; foreach ($chartData as $code => $d): ?>
                 <span class="badge" style="background:<?= $chartColors[$ci % count($chartColors)] ?>"><?= esc($code) ?></span>
@@ -178,12 +178,12 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
 
 <!-- Supplier Offers Table -->
 <div class="card mb-4">
-    <div class="card-header"><strong>Supplier Offers (<?= count($offers) ?>)</strong></div>
+    <div class="card-header"><strong><?= t('supplier_offers') ?> (<?= count($offers) ?>)</strong></div>
     <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
             <thead><tr>
-                <th></th><th>Supplier</th><th>Purchase Price</th><th>Regular Price</th><th>Currency</th>
-                <th>Availability</th><th>Stock</th><th>Last Seen</th><th>Last Price Check</th><th>Active</th><th></th>
+                <th></th><th><?= t('suppliers') ?></th><th><?= t('purchase_price') ?></th><th><?= t('regular_price') ?></th><th><?= t('currency') ?></th>
+                <th><?= t('availability') ?></th><th><?= t('stock') ?></th><th><?= t('last_seen') ?></th><th><?= t('last_price_check') ?></th><th><?= t('active') ?></th><th></th>
             </tr></thead>
             <tbody>
             <?php foreach ($offers as $i => $o): ?>
@@ -210,12 +210,12 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
 <?php if (!empty($history)): ?>
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between">
-        <strong>Price History Log (<?= count($history) ?> records)</strong>
+        <strong><?= t('price_history') ?> (<?= count($history) ?>)</strong>
         <a href="<?= url('price_history', ['product_id' => $id, 'export' => 'csv']) ?>" class="btn btn-outline-success btn-xs"><i class="bi bi-download"></i> CSV</a>
     </div>
     <div class="table-responsive" style="max-height:400px;overflow-y:auto">
         <table class="table table-sm mb-0">
-            <thead class="sticky-top bg-white"><tr><th>Date</th><th>Supplier</th><th>Purchase</th><th>Regular</th><th>Change</th><th>Availability</th><th>Active</th></tr></thead>
+            <thead class="sticky-top bg-white"><tr><th><?= t('date') ?></th><th><?= t('suppliers') ?></th><th><?= t('purchase_price') ?></th><th><?= t('regular_price') ?></th><th><?= t('change') ?></th><th><?= t('availability') ?></th><th><?= t('active') ?></th></tr></thead>
             <tbody>
             <?php
             $prevPrices = [];
@@ -250,7 +250,7 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
 <!-- Full Specifications -->
 <?php if (!empty($allSpecs)): ?>
 <div class="card mb-4">
-    <div class="card-header"><strong>Specifications</strong></div>
+    <div class="card-header"><strong><?= t('specifications') ?></strong></div>
     <div class="card-body">
         <?php if (count($allSpecs) > 1): ?>
             <ul class="nav nav-tabs mb-3" role="tablist">
@@ -286,7 +286,7 @@ foreach ($offers as $o) {
 }
 if (!empty($descriptions)): ?>
 <div class="card mb-4">
-    <div class="card-header"><strong>Description</strong></div>
+    <div class="card-header"><strong><?= t('description') ?></strong></div>
     <div class="card-body">
         <?php if (count($descriptions) > 1): ?>
             <ul class="nav nav-tabs mb-3" role="tablist">

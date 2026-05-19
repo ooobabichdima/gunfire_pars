@@ -23,13 +23,13 @@ if ($selectedFile && preg_match('/^[\w\-\.]+\.log$/', $selectedFile)) {
 }
 ?>
 
-<h4 class="mb-3">Logs</h4>
+<h4 class="mb-3"><?= t('logs') ?></h4>
 
 <form class="row g-2 mb-3">
     <input type="hidden" name="page" value="logs">
     <div class="col-md-4">
         <select name="file" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="">Select log file...</option>
+            <option value=""><?= t('select_log_file') ?></option>
             <?php foreach ($files as $f):
                 $name = basename($f);
                 $size = round(filesize($f) / 1024, 1); ?>
@@ -39,13 +39,13 @@ if ($selectedFile && preg_match('/^[\w\-\.]+\.log$/', $selectedFile)) {
     </div>
     <div class="col-md-2">
         <select name="level" class="form-select form-select-sm">
-            <option value="">All levels</option>
+            <option value=""><?= t('all_levels') ?></option>
             <?php foreach (['ERROR','WARNING','INFO','DEBUG'] as $lv): ?>
                 <option value="<?= strtolower($lv) ?>" <?= $levelFilter === strtolower($lv) ? 'selected' : '' ?>><?= $lv ?></option>
             <?php endforeach; ?>
         </select>
     </div>
-    <div class="col-auto"><button class="btn btn-sm btn-primary">Filter</button></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><?= t('filter') ?></button></div>
 </form>
 
 <?php if (!empty($lines)): ?>

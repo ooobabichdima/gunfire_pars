@@ -20,9 +20,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$auth->hasPassword()) {
         if (strlen($password) < 4) {
-            $error = 'Password must be at least 4 characters';
+            $error = t('password_min_length');
         } elseif ($password !== $passwordConfirm) {
-            $error = 'Passwords do not match';
+            $error = t('passwords_mismatch');
         } else {
             $auth->setPassword($password);
             $auth->login($password);
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: index.php');
             exit;
         }
-        $error = 'Invalid password';
+        $error = t('invalid_password');
     }
 }
 
@@ -51,20 +51,20 @@ $needsSetup = !$auth->hasPassword();
 <body class="bg-dark d-flex align-items-center justify-content-center" style="min-height: 100vh;">
 <div class="card" style="width: 380px;">
     <div class="card-body p-4">
-        <h4 class="text-center mb-3"><?= $needsSetup ? 'Set Admin Password' : 'Admin Login' ?></h4>
+        <h4 class="text-center mb-3"><?= $needsSetup ? t('setup_title') : t('login_title') ?></h4>
         <?php if ($error): ?>
             <div class="alert alert-danger py-2"><?= esc($error) ?></div>
         <?php endif; ?>
         <form method="POST">
             <div class="mb-3">
-                <input type="password" name="password" class="form-control" placeholder="Password" required autofocus>
+                <input type="password" name="password" class="form-control" placeholder="<?= t('password') ?>" required autofocus>
             </div>
             <?php if ($needsSetup): ?>
                 <div class="mb-3">
-                    <input type="password" name="password_confirm" class="form-control" placeholder="Confirm password" required>
+                    <input type="password" name="password_confirm" class="form-control" placeholder="<?= t('confirm_password') ?>" required>
                 </div>
             <?php endif; ?>
-            <button type="submit" class="btn btn-primary w-100"><?= $needsSetup ? 'Create Password' : 'Login' ?></button>
+            <button type="submit" class="btn btn-primary w-100"><?= $needsSetup ? t('create_password_btn') : t('login_btn') ?></button>
         </form>
     </div>
 </div>
