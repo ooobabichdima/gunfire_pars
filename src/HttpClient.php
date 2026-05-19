@@ -119,11 +119,14 @@ final class HttpClient
         // Build list of channels: [null=direct, proxy1, proxy2, ...]
         $channels = $this->buildChannelList($hasProxy);
 
-        foreach ($channels as $channelProxy) {
+        foreach ($channels as $ci => $channelProxy) {
+            $label = $channelProxy ? preg_replace('#https?://[^@]+@#', '', mb_substr($channelProxy, 0, 40)) : 'direct';
+            $this->logger->console("    [{$ci}] → {$label}");
+
             $response = $this->attemptRequest($method, $url, $options, $channelProxy);
 
             if ($response === null) {
-                // Timeout/connection error — mark failed, try next
+                $this->logger->console("    [{$ci}] ✗ timeout ({$label})");
                 if ($channelProxy !== null && $hasProxy) {
                     $this->proxyManager->markFailed($channelProxy);
                 }
@@ -134,15 +137,16 @@ final class HttpClient
             }
 
             $statusCode = $response->getStatusCode();
+            $bodyLen = strlen((string)$response->getBody());
+            $response->getBody()->rewind();
+            $this->logger->console("    [{$ci}] HTTP {$statusCode} ({$bodyLen}b) via {$label}");
 
             // Ban/rate-limit — try next channel
             if ($statusCode === 403 || $statusCode === 429) {
                 if ($channelProxy !== null && $hasProxy) {
                     $this->proxyManager->markFailed($channelProxy);
-                    $this->logger->debug("Proxy blocked ({$statusCode}): " . mb_substr($channelProxy, 0, 25));
                 } else {
                     $this->directFailCount++;
-                    $this->logger->debug("Direct blocked ({$statusCode})");
                 }
                 continue;
             }
