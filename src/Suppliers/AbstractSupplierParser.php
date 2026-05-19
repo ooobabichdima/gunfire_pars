@@ -146,7 +146,7 @@ abstract class AbstractSupplierParser implements SupplierParserInterface
     /**
      * Upsert a supplier offer into the database.
      */
-    protected function saveOffer(array $data): int
+    public function saveOffer(array $data): int
     {
         $data['supplier_id'] = $this->supplierId;
         $data['last_seen_at'] = date('Y-m-d H:i:s');

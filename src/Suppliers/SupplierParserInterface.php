@@ -12,6 +12,11 @@ interface SupplierParserInterface
     public function getSupplierCode(): string;
 
     /**
+     * Returns the supplier's database ID.
+     */
+    public function getSupplierId(): int;
+
+    /**
      * Scan all category URLs from the supplier's site.
      * @return array<string> List of category URLs.
      */
