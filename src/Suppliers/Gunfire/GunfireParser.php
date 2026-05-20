@@ -496,38 +496,44 @@ final class GunfireParser extends AbstractSupplierParser
 
     private function parseBrand(Crawler $crawler, string $html): string
     {
-        // DOM selectors — Gunfire links to /en/producers/brand-NNNN.html
+        // Priority 1: JSON-LD brand (most reliable, set by shop)
+        $brand = $this->extractFromJsonLd($html, 'brand');
+        if (!empty($brand) && mb_strlen($brand) > 1 && mb_strlen($brand) < 80) {
+            return $brand;
+        }
+
+        // Priority 2: itemprop="brand"
         $selectors = [
             '[itemprop="brand"] [itemprop="name"]',
             '[itemprop="brand"]',
-            'a[href*="/producers/"]',
-            'a[href*="/en/producers/"]',
-            '.product-brand',
-            '.product__brand',
-            '.brand-name',
-            'a[href*="/brand/"]',
         ];
-
         foreach ($selectors as $sel) {
             $brand = $this->nodeText($crawler, $sel);
-            if (!empty($brand) && mb_strlen($brand) > 1 && mb_strlen($brand) < 100) {
-                // Skip if it looks like a full URL or navigation text
-                if (!str_contains($brand, '/') && !str_contains($brand, 'http')) {
-                    return $brand;
-                }
+            if (!empty($brand) && mb_strlen($brand) > 1 && mb_strlen($brand) < 80) {
+                return $brand;
+            }
+            $brand = $this->nodeAttr($crawler, $sel, 'content');
+            if (!empty($brand) && mb_strlen($brand) > 1) {
+                return $this->cleanText($brand);
             }
         }
 
-        // Fallback: meta itemprop="brand"
-        $brand = $this->nodeAttr($crawler, 'meta[itemprop="brand"]', 'content');
-        if (!empty($brand)) {
-            return $this->cleanText($brand);
-        }
-
-        // Fallback: JSON-LD structured data
-        $brand = $this->extractFromJsonLd($html, 'brand');
-        if (!empty($brand)) {
-            return $brand;
+        // Priority 3: Producer link near product info (first one only)
+        $selectors = [
+            '.product-brand a', '.product__brand a', '.brand-name a',
+            'a[href*="/producers/"]',
+        ];
+        foreach ($selectors as $sel) {
+            try {
+                $node = $crawler->filter($sel)->first();
+                if ($node->count() > 0) {
+                    $brand = $this->cleanText($node->text(''));
+                    if (!empty($brand) && mb_strlen($brand) > 1 && mb_strlen($brand) < 80
+                        && !str_contains($brand, '/') && !str_contains($brand, 'http')) {
+                        return $brand;
+                    }
+                }
+            } catch (\Exception) {}
         }
 
         return '';
@@ -560,6 +566,16 @@ final class GunfireParser extends AbstractSupplierParser
         $sku = $this->extractFromJsonLd($html, 'sku');
         if (!empty($sku)) {
             return $sku;
+        }
+
+        // Extract "Product code: XXX" from page text
+        if (preg_match('/Product\s*code[\s:]+([A-Z0-9][\w\-]{3,30})/i', $html, $m)) {
+            return trim($m[1]);
+        }
+
+        // Extract "Kod produktu: XXX"
+        if (preg_match('/Kod\s*produktu[\s:]+([A-Z0-9][\w\-]{3,30})/i', $html, $m)) {
+            return trim($m[1]);
         }
 
         return '';
