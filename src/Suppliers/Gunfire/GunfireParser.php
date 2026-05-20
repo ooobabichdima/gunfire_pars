@@ -163,7 +163,7 @@ final class GunfireParser extends AbstractSupplierParser
         $prices = $this->parsePrices($crawler, $html);
         $data['price_purchase'] = $prices['current'];
         $data['price_regular'] = $prices['regular'];
-        $data['currency'] = $this->config['currency'] ?? 'PLN';
+        $data['currency'] = $this->parseCurrency($crawler, $html);
 
         $data['availability'] = $this->parseAvailability($crawler, $html);
         $data['stock_qty_text'] = $this->parseStockText($crawler);
@@ -177,7 +177,7 @@ final class GunfireParser extends AbstractSupplierParser
         $series = $this->parseSeries($crawler, $breadcrumbs);
 
         $data['raw_data'] = [
-            'description'    => mb_substr($description, 0, 10000),
+            'description'    => mb_substr($description, 0, 30000),
             'specifications' => $specifications,
             'breadcrumbs'    => $breadcrumbs,
             'images'         => $images,
@@ -722,6 +722,35 @@ final class GunfireParser extends AbstractSupplierParser
         return $result;
     }
 
+    private function parseCurrency(Crawler $crawler, string $html): string
+    {
+        // JSON-LD priceCurrency
+        $jsonCurrency = $this->extractFromJsonLd($html, 'priceCurrency');
+        if (!empty($jsonCurrency) && strlen($jsonCurrency) === 3) {
+            return strtoupper($jsonCurrency);
+        }
+
+        // itemprop="priceCurrency"
+        $content = $this->nodeAttr($crawler, '[itemprop="priceCurrency"]', 'content');
+        if (!empty($content) && strlen($content) === 3) {
+            return strtoupper($content);
+        }
+
+        // Detect from price text on page
+        $htmlLower = mb_strtolower($html);
+        if (str_contains($htmlLower, '€') || preg_match('/\beur\b/i', $html)) {
+            return 'EUR';
+        }
+        if (str_contains($htmlLower, 'zł') || preg_match('/\bpln\b/i', $html)) {
+            return 'PLN';
+        }
+        if (str_contains($htmlLower, '₴') || preg_match('/\buah\b/i', $html)) {
+            return 'UAH';
+        }
+
+        return $this->config['currency'] ?? 'PLN';
+    }
+
     private function parseAvailability(Crawler $crawler, string $html): string
     {
         // PRIMARY: "Add to basket" button is the ground truth on Gunfire
@@ -1097,140 +1126,79 @@ final class GunfireParser extends AbstractSupplierParser
     {
         $images = [];
 
-        // Strategy 1: All img tags with product image attributes (don't break — collect from ALL selectors)
+        // Strategy 1: DOM img tags — collect all unique
         $imgSelectors = [
-            '.product-gallery img',
-            '.product-images img',
-            '.product__gallery img',
-            '.gallery img',
-            '.swiper img',
-            '.slider img',
-            '.carousel img',
-            '.product-photo img',
-            '.product-image img',
-            '.photos img',
-            '.lightbox img',
-            '.fancybox img',
-            '[itemprop="image"]',
+            '.product-gallery img', '.product-images img', '.product__gallery img',
+            '.gallery img', '.swiper img', '.slider img', '.carousel img',
+            '.product-photo img', '.product-image img', '.photos img',
+            '.lightbox img', '.fancybox img', '[itemprop="image"]',
         ];
 
         foreach ($imgSelectors as $sel) {
             try {
                 $crawler->filter($sel)->each(function (Crawler $node) use (&$images) {
-                    foreach (['src', 'data-src', 'data-lazy', 'data-original', 'data-zoom', 'data-large', 'data-full', 'data-image'] as $attr) {
-                        $val = $node->attr($attr) ?? '';
-                        if ($this->isValidImageUrl($val)) {
-                            $images[] = $this->absoluteUrl($val);
-                        }
-                    }
-                    $srcset = $node->attr('srcset') ?? '';
-                    if (!empty($srcset)) {
-                        foreach (explode(',', $srcset) as $entry) {
-                            $url = trim(explode(' ', trim($entry))[0]);
-                            if ($this->isValidImageUrl($url)) {
-                                $images[] = $this->absoluteUrl($url);
-                            }
-                        }
+                    $src = $node->attr('data-src') ?? $node->attr('src') ?? $node->attr('data-lazy') ?? '';
+                    if ($this->isValidImageUrl($src)) {
+                        $images[] = $this->absoluteUrl($src);
                     }
                 });
-            } catch (\Exception) {
-                continue;
+            } catch (\Exception) {}
+        }
+
+        // Strategy 2: Gallery <a> links (full-size)
+        if (empty($images)) {
+            $linkSelectors = [
+                '.product-gallery a[href]', '.gallery a[href]', 'a[data-fancybox]',
+                'a[data-lightbox]', 'a.lightbox[href]',
+            ];
+            foreach ($linkSelectors as $sel) {
+                try {
+                    $crawler->filter($sel)->each(function (Crawler $node) use (&$images) {
+                        $href = $node->attr('href') ?? '';
+                        if ($this->isValidImageUrl($href)) {
+                            $images[] = $this->absoluteUrl($href);
+                        }
+                    });
+                } catch (\Exception) {}
             }
         }
 
-        // Strategy 2: <a> tags wrapping gallery thumbnails (href = full-size image)
-        $linkSelectors = [
-            '.product-gallery a[href]',
-            '.gallery a[href]',
-            '.photos a[href]',
-            'a.lightbox[href]',
-            'a.fancybox[href]',
-            'a[data-fancybox] ',
-            'a[data-lightbox]',
-            'a[rel="gallery"]',
-        ];
-
-        foreach ($linkSelectors as $sel) {
-            try {
-                $crawler->filter($sel)->each(function (Crawler $node) use (&$images) {
-                    $href = $node->attr('href') ?? '';
-                    if ($this->isValidImageUrl($href)) {
-                        $images[] = $this->absoluteUrl($href);
-                    }
-                    $dataHref = $node->attr('data-href') ?? $node->attr('data-src') ?? $node->attr('data-image') ?? '';
-                    if ($this->isValidImageUrl($dataHref)) {
-                        $images[] = $this->absoluteUrl($dataHref);
-                    }
-                });
-            } catch (\Exception) {
-                continue;
-            }
-        }
-
-        // Strategy 3: Raw HTML — find all gunfire CDN image URLs
-        // Pattern: /hpeciai/HASH/eng_pl_NAME_N.webp (or .jpg/.png)
-        if (preg_match_all('#https?://[^"\'\s]+/hpeciai/[^"\'\s]+\.(?:webp|jpg|jpeg|png)#i', $html, $matches)) {
-            foreach ($matches[0] as $url) {
-                if ($this->isValidImageUrl($url)) {
-                    $images[] = $url;
-                }
-            }
-        }
-
-        // Strategy 4: Any image URL matching gunfire product pattern
-        if (preg_match_all('#https?://(?:gunfire\.com|[^"\'\s]*gunfire[^"\'\s]*)/[^"\'\s]+(?:_\d+)\.(?:webp|jpg|jpeg|png)#i', $html, $matches)) {
-            foreach ($matches[0] as $url) {
-                if ($this->isValidImageUrl($url)) {
-                    $images[] = $url;
-                }
-            }
-        }
-
-        // Strategy 5: JSON-LD images
-        if (preg_match_all('/<script\s+type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', $html, $jsonMatches)) {
-            foreach ($jsonMatches[1] as $jsonStr) {
-                $data = json_decode($jsonStr, true);
-                if (!is_array($data)) {
-                    continue;
-                }
-                // "image" can be string or array
-                $jsonImages = $data['image'] ?? [];
-                if (is_string($jsonImages)) {
-                    $jsonImages = [$jsonImages];
-                }
-                foreach ($jsonImages as $img) {
-                    if (is_string($img) && $this->isValidImageUrl($img)) {
-                        $images[] = $img;
-                    }
-                }
-            }
-        }
-
-        // Strategy 6: JS variables / data attributes containing image arrays
-        // e.g., data-images='["url1","url2"]' or var images = ["url1","url2"]
-        if (preg_match_all('/data-images\s*=\s*["\'](\[.*?\])["\']/', $html, $matches)) {
-            foreach ($matches[1] as $jsonArr) {
-                $arr = json_decode(html_entity_decode($jsonArr), true);
-                if (is_array($arr)) {
-                    foreach ($arr as $url) {
-                        if (is_string($url) && $this->isValidImageUrl($url)) {
-                            $images[] = $this->absoluteUrl($url);
+        // Strategy 3: JSON-LD images
+        if (empty($images)) {
+            if (preg_match_all('/<script\s+type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', $html, $jsonMatches)) {
+                foreach ($jsonMatches[1] as $jsonStr) {
+                    $data = json_decode($jsonStr, true);
+                    if (!is_array($data)) continue;
+                    $jsonImages = $data['image'] ?? [];
+                    if (is_string($jsonImages)) $jsonImages = [$jsonImages];
+                    foreach ($jsonImages as $img) {
+                        if (is_string($img) && $this->isValidImageUrl($img)) {
+                            $images[] = $img;
                         }
                     }
                 }
             }
         }
 
-        // Strategy 7: og:image (always grab as baseline)
-        $ogImage = $this->nodeAttr($crawler, 'meta[property="og:image"]', 'content');
-        if (!empty($ogImage) && $this->isValidImageUrl($ogImage)) {
-            $images[] = $ogImage;
+        // Strategy 4: og:image fallback
+        if (empty($images)) {
+            $ogImage = $this->nodeAttr($crawler, 'meta[property="og:image"]', 'content');
+            if (!empty($ogImage) && $this->isValidImageUrl($ogImage)) {
+                $images[] = $ogImage;
+            }
         }
 
-        // Deduplicate, filter thumbnails, sort — max 10 images
-        $images = $this->filterAndSortImages($images);
+        // Deduplicate, sort, max 10
+        $images = array_values(array_unique($images));
 
-        return $images;
+        usort($images, function (string $a, string $b) {
+            $numA = $numB = 0;
+            if (preg_match('/_(\d+)\./', $a, $m)) $numA = (int)$m[1];
+            if (preg_match('/_(\d+)\./', $b, $m)) $numB = (int)$m[1];
+            return $numA <=> $numB;
+        });
+
+        return array_slice($images, 0, 10);
     }
 
     private function isValidImageUrl(string $url): bool
