@@ -844,9 +844,7 @@ final class GunfireParser extends AbstractSupplierParser
 
     private function parseDescription(Crawler $crawler, string $html): string
     {
-        $parts = [];
-
-        // Collect ALL description-like sections (don't stop at first)
+        // Strategy 1: DOM — find the longest text block from product sections
         $selectors = [
             '.product-description',
             '.product__description',
@@ -857,21 +855,22 @@ final class GunfireParser extends AbstractSupplierParser
             '.long-description',
             '.product-info-detailed',
             '.product-detail-description',
-            '.tab-content .description',
-            '.tabs-content .description',
-            '.tab-pane .description',
             '.resetcss',
             '.product-text',
+            '.tab-content',
+            '.tabs-content',
             '[data-tab="description"]',
             '[data-tab-content="description"]',
+            '[itemprop="description"]',
         ];
 
+        $best = '';
         foreach ($selectors as $sel) {
             try {
-                $crawler->filter($sel)->each(function (Crawler $node) use (&$parts) {
+                $crawler->filter($sel)->each(function (Crawler $node) use (&$best) {
                     $text = $this->cleanText($node->text(''));
-                    if (!empty($text) && mb_strlen($text) > 30) {
-                        $parts[] = $text;
+                    if (mb_strlen($text) > mb_strlen($best)) {
+                        $best = $text;
                     }
                 });
             } catch (\Exception) {
@@ -879,41 +878,23 @@ final class GunfireParser extends AbstractSupplierParser
             }
         }
 
-        // itemprop="description" — often a short summary, add if we have nothing better
-        $itemPropDesc = $this->nodeText($crawler, '[itemprop="description"]');
-
-        // JSON-LD description
-        $jsonDesc = $this->extractFromJsonLd($html, 'description');
-
-        // og:description
-        $ogDesc = $this->nodeAttr($crawler, 'meta[property="og:description"]', 'content');
-
-        // meta description
-        $metaDesc = $this->nodeAttr($crawler, 'meta[name="description"]', 'content');
-
-        // Pick the longest available description
-        $candidates = $parts;
-        if (!empty($itemPropDesc) && mb_strlen($itemPropDesc) > 30) {
-            $candidates[] = $itemPropDesc;
-        }
-        if (!empty($jsonDesc) && mb_strlen($jsonDesc) > 30) {
-            $candidates[] = $this->cleanText($jsonDesc);
-        }
-        if (!empty($ogDesc) && mb_strlen($ogDesc) > 30) {
-            $candidates[] = $this->cleanText($ogDesc);
-        }
-        if (!empty($metaDesc) && mb_strlen($metaDesc) > 30) {
-            $candidates[] = $this->cleanText($metaDesc);
+        // Strategy 2: JSON-LD description (often longer than meta)
+        if (mb_strlen($best) < 100) {
+            $jsonDesc = $this->extractFromJsonLd($html, 'description');
+            if (mb_strlen($jsonDesc) > mb_strlen($best)) {
+                $best = $this->cleanText($jsonDesc);
+            }
         }
 
-        if (empty($candidates)) {
-            return '';
+        // Strategy 3: og:description as last resort
+        if (mb_strlen($best) < 50) {
+            $ogDesc = $this->nodeAttr($crawler, 'meta[property="og:description"]', 'content');
+            if (mb_strlen($ogDesc) > mb_strlen($best)) {
+                $best = $this->cleanText($ogDesc);
+            }
         }
 
-        // Return longest description found
-        usort($candidates, fn(string $a, string $b) => mb_strlen($b) <=> mb_strlen($a));
-
-        return $candidates[0];
+        return $best;
     }
 
     /**
@@ -1246,13 +1227,7 @@ final class GunfireParser extends AbstractSupplierParser
             $images[] = $ogImage;
         }
 
-        // Strategy 8: Enumerate _N variants from found images
-        // If we have _1.webp, try _2, _3, ... _15
-        $images = array_values(array_unique($images));
-        $enumerated = $this->enumerateImageVariants($images);
-        $images = array_merge($images, $enumerated);
-
-        // Deduplicate, filter thumbnails, sort
+        // Deduplicate, filter thumbnails, sort — max 10 images
         $images = $this->filterAndSortImages($images);
 
         return $images;
@@ -1311,7 +1286,7 @@ final class GunfireParser extends AbstractSupplierParser
 
     private function filterAndSortImages(array $images): array
     {
-        $images = array_unique($images);
+        $images = array_values(array_unique($images));
 
         // Prefer full-size over thumbnails
         $fullSize = [];
@@ -1341,7 +1316,7 @@ final class GunfireParser extends AbstractSupplierParser
             return $numA <=> $numB;
         });
 
-        return array_values($result);
+        return array_slice(array_values($result), 0, 10);
     }
 
     private function parseSeries(Crawler $crawler, array $breadcrumbs): string

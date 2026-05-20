@@ -75,9 +75,7 @@ final class ProductNormalizer
             $name = str_ireplace($word, ' ', $name);
         }
 
-        // Remove color suffixes like "- Black", "- Tan", "(FDE)"
-        $name = preg_replace('/\s*[-–]\s*(black|tan|fde|od|olive|green|dark earth|grey|gray|coyote|multicam)\s*$/i', '', $name) ?? $name;
-        $name = preg_replace('/\s*\((black|tan|fde|od|olive|green|dark earth|grey|gray|coyote|multicam)\)\s*$/i', '', $name) ?? $name;
+        // Keep color in name — different colors = different products
 
         // Normalize whitespace
         $name = preg_replace('/[^\w\s\-\.\/&+]/u', ' ', $name) ?? $name;
