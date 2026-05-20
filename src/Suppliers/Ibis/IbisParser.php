@@ -8,16 +8,11 @@ use App\Suppliers\AbstractSupplierParser;
 use Symfony\Component\DomCrawler\Crawler;
 
 /**
- * IBIS.net.ua parser — B2B supplier.
+ * IBIS.net.ua parser — all product data comes from JSON-LD @graph.
  *
  * Data sources:
- * 1. XLS price lists from obmen.ibis.net.ua (prices, stock, SKU)
- * 2. Product pages from ibis.net.ua (photos, descriptions, specs)
- *
- * URL patterns:
- *   Categories: /zbroia/, /zbroia/straykbolna-zbroya/
- *   Products:   /zbroia/details/{slug}/ or /products/details/{slug}/
- *   Brands:     /brand/{slug}/
+ * 1. Product pages: JSON-LD Product schema (name, brand, sku, price, images, description)
+ * 2. XLS files from obmen.ibis.net.ua (wholesale prices, stock quantities)
  */
 final class IbisParser extends AbstractSupplierParser
 {
@@ -26,28 +21,28 @@ final class IbisParser extends AbstractSupplierParser
         return 'ibis';
     }
 
-    // ------------------------------------------------------------------
-    // scanCategories — returns category URLs from the site
-    // ------------------------------------------------------------------
     public function scanCategories(): array
     {
         $this->logger->info('Scanning categories from IBIS...');
         $urls = [];
 
-        $startPages = [
-            $this->getBaseUrl() . '/zbroia/',
-            $this->getBaseUrl() . '/ua/products/',
+        $seeds = [
+            '/zbroia/', '/zbroia/straykbolna-zbroya/', '/zbroia/pnevmatika/',
+            '/zbroia/vohnepalna-zbroia/', '/zbroia/prytsily/', '/zbroia/patrony/',
+            '/zbroia/korotkostvolna-zbroya/', '/zbroia/pompovi/',
+            '/zbroia/hvyntivky-karabiny/', '/zbroia/rushnytsi/',
         ];
 
-        foreach ($startPages as $pageUrl) {
-            $html = $this->http->getHtml($pageUrl);
-            if ($html === null) {
-                continue;
-            }
+        foreach ($seeds as $seed) {
+            $urls[] = $this->getBaseUrl() . $seed;
+        }
 
+        // Try to crawl main page for more categories
+        $html = $this->http->getHtml($this->getBaseUrl() . '/zbroia/');
+        if ($html !== null) {
             $crawler = $this->createCrawler($html);
             try {
-                $crawler->filter('a[href]')->each(function (Crawler $node) use (&$urls) {
+                $crawler->filter('a[href*="/zbroia/"]')->each(function (Crawler $node) use (&$urls) {
                     $href = $node->attr('href') ?? '';
                     if ($this->isCategoryUrl($href)) {
                         $urls[] = $this->absoluteUrl($href);
@@ -56,24 +51,11 @@ final class IbisParser extends AbstractSupplierParser
             } catch (\Exception) {}
         }
 
-        // Seed categories
-        $seeds = [
-            '/zbroia/', '/zbroia/straykbolna-zbroya/', '/zbroia/pnevmatika/',
-            '/zbroia/vohnepalna-zbroia/', '/zbroia/prytsily/', '/zbroia/patrony/',
-            '/zbroia/korotkostvolna-zbroya/', '/zbroia/pompovi/',
-        ];
-        foreach ($seeds as $seed) {
-            $urls[] = $this->getBaseUrl() . $seed;
-        }
-
         $urls = array_values(array_unique($urls));
         $this->logger->info("Found " . count($urls) . " categories");
         return $urls;
     }
 
-    // ------------------------------------------------------------------
-    // scanListings — paginate a category, collect product URLs
-    // ------------------------------------------------------------------
     public function scanListings(string $categoryUrl, int $limit = 0): array
     {
         $urls = [];
@@ -82,15 +64,13 @@ final class IbisParser extends AbstractSupplierParser
         while ($page <= 200) {
             $pageUrl = $page > 1 ? (rtrim($categoryUrl, '/') . '/?page=' . $page) : $categoryUrl;
             $html = $this->http->getHtml($pageUrl);
-            if ($html === null) {
-                break;
-            }
+            if ($html === null) break;
 
             $crawler = $this->createCrawler($html);
             $pageUrls = [];
 
             try {
-                $crawler->filter('a[href]')->each(function (Crawler $node) use (&$pageUrls) {
+                $crawler->filter('a[href*="/details/"]')->each(function (Crawler $node) use (&$pageUrls) {
                     $href = $node->attr('href') ?? '';
                     if ($this->isProductUrl($href)) {
                         $pageUrls[] = $this->absoluteUrl($href);
@@ -98,138 +78,170 @@ final class IbisParser extends AbstractSupplierParser
                 });
             } catch (\Exception) {}
 
-            if (empty($pageUrls)) {
-                break;
-            }
+            $pageUrls = array_unique($pageUrls);
+            if (empty($pageUrls)) break;
 
             foreach ($pageUrls as $url) {
                 $urls[] = $url;
-                if ($limit > 0 && count($urls) >= $limit) {
-                    break 2;
-                }
+                if ($limit > 0 && count($urls) >= $limit) break 2;
             }
 
-            $this->logger->debug("IBIS page {$page}: +" . count($pageUrls) . " products");
-
-            // Check for next page
-            $hasNext = false;
-            try {
-                $crawler->filter('a[href]')->each(function (Crawler $node) use (&$hasNext, $page) {
-                    $href = $node->attr('href') ?? '';
-                    if (str_contains($href, 'page=' . ($page + 1))) {
-                        $hasNext = true;
-                    }
-                });
-            } catch (\Exception) {}
-
-            if (!$hasNext) {
-                break;
-            }
-
+            // Check next page
+            $hasNext = str_contains($html, 'page=' . ($page + 1));
+            if (!$hasNext) break;
             $page++;
         }
 
         return array_values(array_unique($urls));
     }
 
-    // ------------------------------------------------------------------
-    // parseProduct — parse a single product page (photos, description, specs)
-    // ------------------------------------------------------------------
     public function parseProduct(string $url): ?array
     {
         $this->logger->debug("Parsing IBIS product: {$url}");
 
         $html = $this->http->getHtml($url);
-        if ($html === null) {
+        if ($html === null) return null;
+
+        // Extract JSON-LD Product from @graph
+        $product = $this->extractProductFromJsonLd($html);
+        if ($product === null) {
+            $this->logger->warning("No JSON-LD Product found: {$url}");
             return null;
         }
 
+        $offers = $product['offers'] ?? [];
+        if (isset($offers['@type'])) $offers = [$offers];
+
+        $offer = $offers[0] ?? [];
+
+        $description = $product['description'] ?? '';
+        // Strip HTML tags from description
+        $description = strip_tags(html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $description = preg_replace('/\s+/', ' ', $description);
+        $description = trim($description);
+
+        // Images from JSON-LD
+        $images = $product['image'] ?? [];
+        if (is_string($images)) $images = [$images];
+
+        // Additional description from #details-description
         $crawler = $this->createCrawler($html);
-        $data = [];
+        $domDescription = '';
+        try {
+            $node = $crawler->filter('#details-description');
+            if ($node->count() > 0) {
+                $domDescription = $this->cleanText($node->text(''));
+            }
+        } catch (\Exception) {}
 
-        $data['url'] = $url;
-        $data['external_id'] = $this->extractIbisId($url, $html);
-
-        $data['name'] = $this->parseName($crawler, $html);
-        if (empty($data['name'])) {
-            $this->logger->warning("Could not extract product name: {$url}");
-            return null;
+        if (mb_strlen($domDescription) > mb_strlen($description)) {
+            $description = $domDescription;
         }
 
-        $data['brand'] = $this->parseBrand($crawler, $html);
-        $data['external_sku'] = $this->parseSku($crawler, $html, $data['name']);
-        $data['ean'] = $this->parseEan($crawler, $html);
-        $data['model'] = $this->parseModel($crawler, $data['name'], $data['brand']);
+        // Tab panel content (tab 0 = "Усе про товар")
+        try {
+            $crawler->filter('[id^="headlessui-tabs-panel"]')->each(function (Crawler $panel) use (&$description) {
+                $text = $this->cleanText($panel->text(''));
+                if (mb_strlen($text) > mb_strlen($description) && mb_strlen($text) > 100) {
+                    $description = $text;
+                }
+            });
+        } catch (\Exception) {}
 
-        $prices = $this->parsePrices($crawler, $html);
-        $data['price_purchase'] = $prices['current'];
-        $data['price_regular'] = $prices['regular'];
-        $data['currency'] = $this->config['currency'] ?? 'UAH';
+        // Extract IBIS code and manufacturer SKU from page title
+        // Pattern: "Назва (16722) 23704777 — купити"
+        $ibisCode = $product['sku'] ?? '';
+        $mfrSku = '';
+        $pageTitle = $this->nodeAttr($crawler, 'meta[property="og:title"]', 'content');
+        if (preg_match('/\((\w{3,15})\)\s*(\d{7,10})/', $pageTitle, $m)) {
+            $mfrSku = $m[1];
+            if (empty($ibisCode)) $ibisCode = $m[2];
+        }
 
-        $data['availability'] = $this->parseAvailability($crawler, $html);
-        $data['stock_qty_text'] = '';
+        // Breadcrumbs from JSON-LD
+        $breadcrumbs = $this->extractBreadcrumbsFromJsonLd($html);
 
-        $description = $this->parseDescription($crawler, $html);
-        $specifications = $this->parseSpecifications($crawler, $html);
-        $data['is_bundle'] = $this->isBundle($data['name'], $description) ? 1 : 0;
-
-        $breadcrumbs = $this->parseBreadcrumbs($crawler);
-        $images = $this->parseImages($crawler, $html);
-
-        $data['raw_data'] = [
-            'description'    => mb_substr($description, 0, 10000),
-            'specifications' => $specifications,
-            'breadcrumbs'    => $breadcrumbs,
-            'images'         => $images,
+        // Specifications from tab panel or page
+        $specifications = [];
+        // Try regex patterns for Ukrainian specs
+        $specPatterns = [
+            'Калібр' => '/Калібр[\s:]*([^<\n]{2,60})/u',
+            'Вага' => '/Вага(?:\s*\([^)]*\))?[\s:]*([^<\n]{2,40})/u',
+            'Довжина' => '/Довжина(?:\s*\([^)]*\))?[\s:]*([^<\n]{2,40})/u',
+            'Тип боєприпасу' => '/Тип боєприпасу[\s:]*([^<\n]{2,60})/u',
+            'Матеріал' => '/Матеріал[\s:]*([^<\n]{2,60})/u',
+            'Ємність магазину' => '/(?:Ємність|Місткість)\s*магазину[\s:]*([^<\n]{2,40})/u',
+            'Потужність' => '/Потужність[\s:]*([^<\n]{2,40})/u',
         ];
+        foreach ($specPatterns as $label => $pattern) {
+            if (preg_match($pattern, $html, $m)) {
+                $val = trim(strip_tags($m[1]));
+                if (!empty($val) && mb_strlen($val) < 60) {
+                    $specifications[$label] = $val;
+                }
+            }
+        }
 
-        $data['is_active'] = 1;
-        $data['last_price_check_at'] = date('Y-m-d H:i:s');
+        $data = [
+            'url'              => $url,
+            'external_id'      => $ibisCode ?: $this->extractIdFromSlug($url),
+            'external_sku'     => $mfrSku ?: $ibisCode,
+            'name'             => $product['name'] ?? '',
+            'brand'            => is_string($product['brand'] ?? null) ? $product['brand'] : ($product['brand']['name'] ?? ''),
+            'ean'              => '',
+            'model'            => '',
+            'price_purchase'   => isset($offer['price']) ? (float)$offer['price'] : null,
+            'price_regular'    => isset($offer['price']) ? (float)$offer['price'] : null,
+            'currency'         => $offer['priceCurrency'] ?? 'UAH',
+            'availability'     => $this->mapAvailability($offer['availability'] ?? ''),
+            'stock_qty_text'   => '',
+            'is_bundle'        => $this->isBundle($product['name'] ?? '', $description) ? 1 : 0,
+            'is_active'        => 1,
+            'last_price_check_at' => date('Y-m-d H:i:s'),
+            'raw_data'         => [
+                'description'    => mb_substr($description, 0, 30000),
+                'specifications' => $specifications,
+                'breadcrumbs'    => $breadcrumbs,
+                'images'         => array_slice($images, 0, 15),
+                'manufacturer_sku' => $mfrSku,
+                'ibis_code'      => $ibisCode,
+            ],
+        ];
 
         return $data;
     }
 
-    // ------------------------------------------------------------------
-    // checkPrice — lightweight price check
-    // ------------------------------------------------------------------
     public function checkPrice(string $url): ?array
     {
         $response = $this->http->get($url);
-        if ($response === null) {
-            return null;
-        }
+        if ($response === null) return null;
 
         $statusCode = $response->getStatusCode();
         if ($statusCode === 404 || $statusCode === 410) {
-            return [
-                'price_purchase' => null,
-                'price_regular'  => null,
-                'currency'       => $this->config['currency'] ?? 'UAH',
-                'availability'   => null,
-                'is_active'      => false,
-            ];
+            return ['price_purchase' => null, 'price_regular' => null, 'currency' => 'UAH', 'availability' => null, 'is_active' => false];
         }
-
-        if ($statusCode >= 400) {
-            return null;
-        }
+        if ($statusCode >= 400) return null;
 
         $html = (string)$response->getBody();
-        $crawler = $this->createCrawler($html);
-        $prices = $this->parsePrices($crawler, $html);
+        $product = $this->extractProductFromJsonLd($html);
+        if ($product === null) return null;
+
+        $offer = $product['offers'] ?? [];
+        if (isset($offer['@type'])) $offer = [$offer];
+        $offer = $offer[0] ?? [];
 
         return [
-            'price_purchase' => $prices['current'],
-            'price_regular'  => $prices['regular'],
-            'currency'       => $this->config['currency'] ?? 'UAH',
-            'availability'   => $this->parseAvailability($crawler, $html),
+            'price_purchase' => isset($offer['price']) ? (float)$offer['price'] : null,
+            'price_regular'  => isset($offer['price']) ? (float)$offer['price'] : null,
+            'currency'       => $offer['priceCurrency'] ?? 'UAH',
+            'availability'   => $this->mapAvailability($offer['availability'] ?? ''),
             'is_active'      => true,
         ];
     }
 
-    // ------------------------------------------------------------------
-    // XLS import — import prices/stock from downloaded XLS files
-    // ------------------------------------------------------------------
+    /**
+     * Import XLS price list (unchanged from original).
+     */
     public function importXls(string $filePath): array
     {
         $this->logger->info("Importing XLS: {$filePath}");
@@ -237,41 +249,37 @@ final class IbisParser extends AbstractSupplierParser
         if (!file_exists($filePath)) {
             throw new \RuntimeException("File not found: {$filePath}");
         }
-
         if (!class_exists(\PhpOffice\PhpSpreadsheet\IOFactory::class)) {
-            throw new \RuntimeException("PhpSpreadsheet not installed. Run: composer require phpoffice/phpspreadsheet");
+            throw new \RuntimeException("Run: composer require phpoffice/phpspreadsheet");
         }
 
         $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
         $sheet = $spreadsheet->getActiveSheet();
         $rows = $sheet->toArray(null, true, true, true);
 
-        // Auto-detect header row
         $headerRow = null;
         $columnMap = [];
         foreach ($rows as $rowIndex => $row) {
-            $rowText = mb_strtolower(implode(' ', array_filter($row)));
+            $rowText = mb_strtolower(implode(' ', array_filter(array_map('strval', $row))));
             if (str_contains($rowText, 'назва') || str_contains($rowText, 'название')
-                || str_contains($rowText, 'ціна') || str_contains($rowText, 'цена')
-                || str_contains($rowText, 'артикул') || str_contains($rowText, 'код')) {
+                || str_contains($rowText, 'найменування')
+                || str_contains($rowText, 'ціна') || str_contains($rowText, 'цена')) {
                 $headerRow = $rowIndex;
                 foreach ($row as $col => $val) {
-                    $val = mb_strtolower(trim((string)$val));
-                    if (str_contains($val, 'назва') || str_contains($val, 'название') || str_contains($val, 'name')) {
+                    $val = mb_strtolower(trim((string)($val ?? '')));
+                    if (str_contains($val, 'найменування') || str_contains($val, 'назва') || str_contains($val, 'название') || str_contains($val, 'name')) {
                         $columnMap['name'] = $col;
                     }
                     if (str_contains($val, 'артикул') || str_contains($val, 'код') || str_contains($val, 'code') || str_contains($val, 'sku')) {
-                        $columnMap['sku'] = $col;
+                        if (!isset($columnMap['sku'])) $columnMap['sku'] = $col;
                     }
                     if (str_contains($val, 'ціна') || str_contains($val, 'цена') || str_contains($val, 'price')) {
-                        if (!isset($columnMap['price'])) {
-                            $columnMap['price'] = $col;
-                        }
+                        if (!isset($columnMap['price'])) $columnMap['price'] = $col;
                     }
-                    if (str_contains($val, 'рроздр') || str_contains($val, 'роздріб') || str_contains($val, 'retail')) {
+                    if (str_contains($val, 'роздріб') || str_contains($val, 'retail') || str_contains($val, 'рроздр')) {
                         $columnMap['price_retail'] = $col;
                     }
-                    if (str_contains($val, 'кільк') || str_contains($val, 'залишок') || str_contains($val, 'qty') || str_contains($val, 'stock')) {
+                    if (str_contains($val, 'кільк') || str_contains($val, 'залишок') || str_contains($val, 'qty') || str_contains($val, 'stock') || str_contains($val, 'вільн')) {
                         $columnMap['qty'] = $col;
                     }
                     if (str_contains($val, 'бренд') || str_contains($val, 'brand') || str_contains($val, 'виробник')) {
@@ -280,7 +288,7 @@ final class IbisParser extends AbstractSupplierParser
                     if (str_contains($val, 'ean') || str_contains($val, 'штрих')) {
                         $columnMap['ean'] = $col;
                     }
-                    if (str_contains($val, 'категор') || str_contains($val, 'group')) {
+                    if (str_contains($val, 'категор') || str_contains($val, 'group') || str_contains($val, 'група')) {
                         $columnMap['category'] = $col;
                     }
                 }
@@ -289,25 +297,26 @@ final class IbisParser extends AbstractSupplierParser
         }
 
         if ($headerRow === null || empty($columnMap['name'])) {
-            $this->logger->error("Could not detect header row in XLS");
+            $this->logger->error("Could not detect header row. Found columns: " . json_encode($columnMap));
+            // Dump first 5 rows for debugging
+            $i = 0;
+            foreach ($rows as $ri => $row) {
+                if ($i++ >= 5) break;
+                $this->logger->console("  Row {$ri}: " . json_encode(array_filter(array_map('strval', $row)), JSON_UNESCAPED_UNICODE));
+            }
             return ['imported' => 0, 'skipped' => 0, 'errors' => 0, 'column_map' => $columnMap];
         }
 
-        $this->logger->info("Detected columns: " . json_encode($columnMap));
+        $this->logger->info("Header row: {$headerRow}, columns: " . json_encode($columnMap));
 
         $stats = ['imported' => 0, 'skipped' => 0, 'errors' => 0];
         $now = date('Y-m-d H:i:s');
 
         foreach ($rows as $rowIndex => $row) {
-            if ($rowIndex <= $headerRow) {
-                continue;
-            }
+            if ($rowIndex <= $headerRow) continue;
 
             $name = trim((string)($row[$columnMap['name']] ?? ''));
-            if (empty($name) || mb_strlen($name) < 3) {
-                $stats['skipped']++;
-                continue;
-            }
+            if (empty($name) || mb_strlen($name) < 3) { $stats['skipped']++; continue; }
 
             try {
                 $sku = isset($columnMap['sku']) ? trim((string)($row[$columnMap['sku']] ?? '')) : '';
@@ -324,7 +333,7 @@ final class IbisParser extends AbstractSupplierParser
                     $availability = $qtyNum > 0 ? 'in_stock' : 'out_of_stock';
                 }
 
-                $offerData = [
+                $this->saveOffer([
                     'supplier_id'        => $this->supplierId,
                     'external_id'        => $externalId,
                     'external_sku'       => $sku,
@@ -333,7 +342,7 @@ final class IbisParser extends AbstractSupplierParser
                     'ean'                => $ean ?: null,
                     'price_purchase'     => $price,
                     'price_regular'      => $priceRetail ?? $price,
-                    'currency'           => $this->config['currency'] ?? 'UAH',
+                    'currency'           => 'UAH',
                     'availability'       => $availability,
                     'stock_qty_text'     => $qty,
                     'is_active'          => ($price !== null && $price > 0) ? 1 : 0,
@@ -341,19 +350,15 @@ final class IbisParser extends AbstractSupplierParser
                     'last_price_check_at' => $now,
                     'updated_at'         => $now,
                     'raw_data'           => [
-                        'xls_file'   => basename($filePath),
-                        'xls_row'    => $rowIndex,
-                        'category'   => isset($columnMap['category']) ? trim((string)($row[$columnMap['category']] ?? '')) : '',
-                        'full_row'   => array_filter($row),
+                        'xls_file' => basename($filePath),
+                        'xls_row'  => $rowIndex,
+                        'category' => isset($columnMap['category']) ? trim((string)($row[$columnMap['category']] ?? '')) : '',
                     ],
-                ];
-
-                $this->saveOffer($offerData);
+                ]);
                 $stats['imported']++;
-
             } catch (\Throwable $e) {
                 $stats['errors']++;
-                $this->logger->error("XLS row {$rowIndex} error: {$e->getMessage()}");
+                $this->logger->error("XLS row {$rowIndex}: {$e->getMessage()}");
             }
         }
 
@@ -361,22 +366,14 @@ final class IbisParser extends AbstractSupplierParser
         return $stats;
     }
 
-    /**
-     * Download XLS files from obmen.ibis.net.ua.
-     */
     public function downloadXlsFiles(string $targetDir): array
     {
         $baseUrl = $this->config['xls_base_url'] ?? '';
         $login = $this->config['xls_auth_login'] ?? '';
         $password = $this->config['xls_auth_password'] ?? '';
 
-        if (empty($baseUrl)) {
-            throw new \RuntimeException("xls_base_url not configured for IBIS");
-        }
-
-        if (!is_dir($targetDir)) {
-            mkdir($targetDir, 0755, true);
-        }
+        if (empty($baseUrl)) throw new \RuntimeException("xls_base_url not configured");
+        if (!is_dir($targetDir)) mkdir($targetDir, 0755, true);
 
         $files = $this->config['xls_files'] ?? [
             'Вільні залишки Київ.xls',
@@ -389,22 +386,17 @@ final class IbisParser extends AbstractSupplierParser
             $url = rtrim($baseUrl, '/') . '/' . rawurlencode($file);
             $localPath = $targetDir . '/' . $file;
 
-            $this->logger->info("Downloading: {$url}");
-
-            $options = [];
-            if (!empty($login)) {
-                $options['auth'] = [$login, $password];
-            }
-
+            $this->logger->console("  Downloading: {$file}");
+            $options = !empty($login) ? ['auth' => [$login, $password]] : [];
             $response = $this->http->get($url, $options);
+
             if ($response === null || $response->getStatusCode() !== 200) {
                 $this->logger->error("Failed to download: {$file}");
                 continue;
             }
 
             file_put_contents($localPath, (string)$response->getBody());
-            $size = filesize($localPath);
-            $this->logger->info("Downloaded {$file}: {$size} bytes");
+            $this->logger->console("  OK: " . number_format(filesize($localPath)) . " bytes");
             $downloaded[] = $localPath;
         }
 
@@ -412,344 +404,89 @@ final class IbisParser extends AbstractSupplierParser
     }
 
     // ==================================================================
-    //  Private helpers
-    // ==================================================================
 
-    private function extractIbisId(string $url, string $html): ?string
+    private function extractProductFromJsonLd(string $html): ?array
     {
-        // IBIS uses 8-digit codes in page title: "... 23704089 — купити"
-        if (preg_match('/\b(\d{7,10})\b\s*[—\-–]/', $html, $m)) {
-            return $m[1];
+        if (!preg_match_all('/<script\s+type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', $html, $matches)) {
+            return null;
         }
-        // From URL slug
-        $slug = basename(rtrim(parse_url($url, PHP_URL_PATH) ?? '', '/'));
-        if (!empty($slug)) {
-            return 'ibis_' . $slug;
+
+        foreach ($matches[1] as $jsonStr) {
+            $data = json_decode($jsonStr, true);
+            if (!is_array($data)) continue;
+
+            // Direct Product
+            if (($data['@type'] ?? '') === 'Product') return $data;
+
+            // Inside @graph
+            if (isset($data['@graph'])) {
+                foreach ($data['@graph'] as $node) {
+                    if (is_array($node) && ($node['@type'] ?? '') === 'Product') {
+                        return $node;
+                    }
+                }
+            }
         }
+
         return null;
     }
 
-    private function parseName(Crawler $crawler, string $html): string
+    private function extractBreadcrumbsFromJsonLd(string $html): array
     {
-        $selectors = ['h1[itemprop="name"]', 'h1.product-name', 'h1.product-title', 'h1'];
-
-        foreach ($selectors as $sel) {
-            $name = $this->nodeText($crawler, $sel);
-            if (!empty($name) && mb_strlen($name) > 2 && mb_strlen($name) < 300) {
-                $name = preg_replace('/\s*\d{7,10}\s*[—\-–]\s*купити.*$/iu', '', $name) ?? $name;
-                return trim($name);
-            }
+        if (!preg_match_all('/<script\s+type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', $html, $matches)) {
+            return [];
         }
 
-        $ogTitle = $this->nodeAttr($crawler, 'meta[property="og:title"]', 'content');
-        if (!empty($ogTitle)) {
-            $ogTitle = preg_replace('/\s*\d{7,10}\s*[—\-–]\s*купити.*$/iu', '', $ogTitle) ?? $ogTitle;
-            $ogTitle = preg_replace('/\s*[|—\-–]\s*ІБІС.*$/iu', '', $ogTitle) ?? $ogTitle;
-            return $this->cleanText($ogTitle);
-        }
+        foreach ($matches[1] as $jsonStr) {
+            $data = json_decode($jsonStr, true);
+            if (!is_array($data)) continue;
 
-        return '';
-    }
+            $list = null;
+            if (($data['@type'] ?? '') === 'BreadcrumbList') $list = $data;
 
-    private function parseBrand(Crawler $crawler, string $html): string
-    {
-        $selectors = [
-            '[itemprop="brand"] [itemprop="name"]',
-            '[itemprop="brand"]',
-            'a[href*="/brand/"]',
-            '.product-brand', '.brand-name',
-        ];
-
-        foreach ($selectors as $sel) {
-            $brand = $this->nodeText($crawler, $sel);
-            if (!empty($brand) && mb_strlen($brand) > 1 && mb_strlen($brand) < 80) {
-                return $brand;
-            }
-        }
-
-        $brand = $this->extractFromJsonLd($html, 'brand');
-        if (!empty($brand)) {
-            return $brand;
-        }
-
-        return '';
-    }
-
-    private function parseSku(Crawler $crawler, string $html, string $name): string
-    {
-        $selectors = ['[itemprop="sku"]', '.product-sku', '[data-sku]'];
-
-        foreach ($selectors as $sel) {
-            $sku = $this->nodeText($crawler, $sel);
-            if (empty($sku)) $sku = $this->nodeAttr($crawler, $sel, 'content');
-            if (!empty($sku)) return trim($sku);
-        }
-
-        // From title: "ASG CZ Shadow 2 (19307) 23704089"
-        if (preg_match('/\((\w{3,15})\)/', $name, $m)) {
-            return $m[1];
-        }
-
-        $sku = $this->extractFromJsonLd($html, 'sku');
-        if (!empty($sku)) return $sku;
-
-        return '';
-    }
-
-    private function parseEan(Crawler $crawler, string $html): string
-    {
-        $selectors = ['[itemprop="gtin13"]', '[itemprop="gtin"]'];
-        foreach ($selectors as $sel) {
-            $ean = $this->nodeText($crawler, $sel);
-            if (empty($ean)) $ean = $this->nodeAttr($crawler, $sel, 'content');
-            if (!empty($ean) && preg_match('/^\d{8,14}$/', trim($ean))) return trim($ean);
-        }
-
-        if (preg_match('/\bEAN[\s:]*(\d{13})\b/i', $html, $m)) return $m[1];
-
-        return '';
-    }
-
-    private function parseModel(Crawler $crawler, string $name, string $brand): string
-    {
-        $model = $this->nodeText($crawler, '[itemprop="model"]');
-        if (!empty($model)) return $model;
-
-        if (!empty($brand) && !empty($name)) {
-            $work = trim(str_ireplace($brand, '', $name));
-            if (preg_match('/\b([A-Z]{1,5}[\-\.]?\d{1,5}[A-Z]?\d{0,3})\b/i', $work, $m)) {
-                return strtoupper($m[1]);
-            }
-        }
-
-        return '';
-    }
-
-    private function parsePrices(Crawler $crawler, string $html): array
-    {
-        $result = ['current' => null, 'regular' => null];
-
-        $jsonPrice = $this->extractFromJsonLd($html, 'price');
-        if (!empty($jsonPrice)) {
-            $result['current'] = $this->parsePrice($jsonPrice);
-        }
-
-        if ($result['current'] === null) {
-            $priceText = $this->nodeAttr($crawler, '[itemprop="price"]', 'content');
-            if (!empty($priceText)) {
-                $result['current'] = $this->parsePrice($priceText);
-            }
-        }
-
-        if ($result['current'] === null) {
-            $selectors = ['.product-price', '.price', '.current-price', '.price-current'];
-            foreach ($selectors as $sel) {
-                $text = $this->nodeText($crawler, $sel);
-                if (!empty($text)) {
-                    $price = $this->parsePrice($text);
-                    if ($price !== null && $price > 0) {
-                        $result['current'] = $price;
+            if (isset($data['@graph'])) {
+                foreach ($data['@graph'] as $node) {
+                    if (is_array($node) && ($node['@type'] ?? '') === 'BreadcrumbList') {
+                        $list = $node;
                         break;
                     }
                 }
             }
-        }
 
-        if ($result['current'] === null) {
-            if (preg_match('/(\d[\d\s,.]*\d)\s*(?:грн|UAH|₴)/i', $html, $m)) {
-                $result['current'] = $this->parsePrice($m[1]);
+            if ($list && isset($list['itemListElement'])) {
+                $breadcrumbs = [];
+                foreach ($list['itemListElement'] as $item) {
+                    $name = $item['name'] ?? '';
+                    if (!empty($name) && mb_strtolower($name) !== 'ібіс') {
+                        $breadcrumbs[] = ['name' => $name, 'url' => $item['item'] ?? ''];
+                    }
+                }
+                return $breadcrumbs;
             }
         }
 
-        if ($result['regular'] === null) {
-            $result['regular'] = $result['current'];
-        }
-
-        return $result;
+        return [];
     }
 
-    private function parseAvailability(Crawler $crawler, string $html): string
+    private function mapAvailability(string $schemaUrl): string
     {
-        $jsonAvail = $this->extractFromJsonLd($html, 'availability');
-        if (!empty($jsonAvail)) {
-            if (str_contains($jsonAvail, 'InStock')) return 'in_stock';
-            if (str_contains($jsonAvail, 'OutOfStock')) return 'out_of_stock';
-        }
-
-        $selectors = ['[itemprop="availability"]', '.availability', '.stock-status'];
-        foreach ($selectors as $sel) {
-            $text = $this->nodeText($crawler, $sel);
-            if (!empty($text)) {
-                $lower = mb_strtolower($text);
-                if (str_contains($lower, 'є в наявності') || str_contains($lower, 'в наличии') || str_contains($lower, 'in stock')) return 'in_stock';
-                if (str_contains($lower, 'немає') || str_contains($lower, 'нет') || str_contains($lower, 'out of stock')) return 'out_of_stock';
-                return $lower;
-            }
-        }
-
+        if (str_contains($schemaUrl, 'InStock')) return 'in_stock';
+        if (str_contains($schemaUrl, 'OutOfStock')) return 'out_of_stock';
+        if (str_contains($schemaUrl, 'PreOrder')) return 'preorder';
         return 'unknown';
     }
 
-    private function parseDescription(Crawler $crawler, string $html): string
+    private function extractIdFromSlug(string $url): string
     {
-        $selectors = [
-            '[itemprop="description"]', '.product-description', '.description',
-            '#description', '.product-text', '.tab-content',
-        ];
-
-        $best = '';
-        foreach ($selectors as $sel) {
-            $text = $this->nodeText($crawler, $sel);
-            if (!empty($text) && mb_strlen($text) > mb_strlen($best)) {
-                $best = $text;
-            }
-        }
-
-        $ogDesc = $this->nodeAttr($crawler, 'meta[property="og:description"]', 'content');
-        if (!empty($ogDesc) && mb_strlen($ogDesc) > mb_strlen($best)) {
-            $best = $this->cleanText($ogDesc);
-        }
-
-        return $best;
-    }
-
-    private function parseSpecifications(Crawler $crawler, string $html): array
-    {
-        $specs = [];
-
-        try {
-            $crawler->filter('table tr')->each(function (Crawler $row) use (&$specs) {
-                $cells = [];
-                $row->filter('td, th')->each(function (Crawler $cell) use (&$cells) {
-                    $cells[] = $this->cleanText($cell->text(''));
-                });
-                if (count($cells) >= 2 && !empty($cells[0])) {
-                    $specs[$cells[0]] = $cells[1];
-                }
-            });
-        } catch (\Exception) {}
-
-        if (empty($specs)) {
-            try {
-                $crawler->filter('dl')->each(function (Crawler $dl) use (&$specs) {
-                    $dts = $dl->filter('dt');
-                    $dds = $dl->filter('dd');
-                    for ($i = 0; $i < min($dts->count(), $dds->count()); $i++) {
-                        $key = $this->cleanText($dts->eq($i)->text(''));
-                        $val = $this->cleanText($dds->eq($i)->text(''));
-                        if (!empty($key)) $specs[$key] = $val;
-                    }
-                });
-            } catch (\Exception) {}
-        }
-
-        return $specs;
-    }
-
-    private function parseBreadcrumbs(Crawler $crawler): array
-    {
-        $breadcrumbs = [];
-        $selectors = [
-            '[itemprop="itemListElement"] [itemprop="name"]',
-            '.breadcrumb a', '.breadcrumbs a', 'ol.breadcrumb a',
-        ];
-
-        foreach ($selectors as $sel) {
-            try {
-                $crawler->filter($sel)->each(function (Crawler $node) use (&$breadcrumbs) {
-                    $name = $this->cleanText($node->text(''));
-                    $href = $node->attr('href') ?? '';
-                    if (!empty($name) && mb_strtolower($name) !== 'головна') {
-                        $breadcrumbs[] = ['name' => $name, 'url' => $href ? $this->absoluteUrl($href) : ''];
-                    }
-                });
-            } catch (\Exception) { continue; }
-            if (!empty($breadcrumbs)) break;
-        }
-
-        return $breadcrumbs;
-    }
-
-    private function parseImages(Crawler $crawler, string $html): array
-    {
-        $images = [];
-
-        $selectors = [
-            '.product-gallery img', '.product-images img', '.gallery img',
-            '.product-photo img', '.swiper img', '[itemprop="image"]',
-        ];
-
-        foreach ($selectors as $sel) {
-            try {
-                $crawler->filter($sel)->each(function (Crawler $node) use (&$images) {
-                    foreach (['src', 'data-src', 'data-lazy', 'data-original', 'data-zoom'] as $attr) {
-                        $val = $node->attr($attr) ?? '';
-                        if (!empty($val) && !str_starts_with($val, 'data:') && !str_contains($val, 'placeholder')) {
-                            $images[] = $this->absoluteUrl($val);
-                        }
-                    }
-                });
-            } catch (\Exception) { continue; }
-        }
-
-        // Gallery links
-        try {
-            $crawler->filter('a[data-fancybox], a.lightbox, a[data-lightbox], a[rel="gallery"]')->each(function (Crawler $node) use (&$images) {
-                $href = $node->attr('href') ?? '';
-                if (!empty($href) && preg_match('/\.(jpg|jpeg|png|webp)/i', $href)) {
-                    $images[] = $this->absoluteUrl($href);
-                }
-            });
-        } catch (\Exception) {}
-
-        // Raw HTML: ibis image CDN
-        if (preg_match_all('#https?://[^"\'\s]+ibis[^"\'\s]+\.(?:jpg|jpeg|png|webp)#i', $html, $m)) {
-            foreach ($m[0] as $url) {
-                if (!str_contains($url, 'logo') && !str_contains($url, 'icon')) {
-                    $images[] = $url;
-                }
-            }
-        }
-
-        // og:image
-        $ogImage = $this->nodeAttr($crawler, 'meta[property="og:image"]', 'content');
-        if (!empty($ogImage)) {
-            $images[] = $ogImage;
-        }
-
-        return array_values(array_unique($images));
-    }
-
-    private function extractFromJsonLd(string $html, string $field): string
-    {
-        if (preg_match_all('/<script\s+type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', $html, $matches)) {
-            foreach ($matches[1] as $jsonStr) {
-                $data = json_decode($jsonStr, true);
-                if (!is_array($data)) continue;
-
-                if (isset($data[$field])) {
-                    if (is_string($data[$field])) return trim($data[$field]);
-                    if (is_numeric($data[$field])) return (string)$data[$field];
-                    if (is_array($data[$field]) && isset($data[$field]['name'])) return trim($data[$field]['name']);
-                }
-
-                if (isset($data['offers'])) {
-                    $offers = isset($data['offers'][0]) ? $data['offers'] : [$data['offers']];
-                    foreach ($offers as $offer) {
-                        if (isset($offer[$field])) {
-                            return is_string($offer[$field]) ? trim($offer[$field]) : (string)$offer[$field];
-                        }
-                    }
-                }
-            }
-        }
-        return '';
+        $path = parse_url($url, PHP_URL_PATH) ?? '';
+        $slug = basename(rtrim($path, '/'));
+        return !empty($slug) ? 'ibis_' . $slug : 'ibis_' . md5($url);
     }
 
     private function isCategoryUrl(string $href): bool
     {
         return (bool)preg_match('#/zbroia/[a-z0-9\-]+/?$#i', $href)
-            || (bool)preg_match('#/(?:ua/)?products/[a-z0-9\-]+/?$#i', $href);
+            && !str_contains($href, '/details/');
     }
 
     private function isProductUrl(string $href): bool
