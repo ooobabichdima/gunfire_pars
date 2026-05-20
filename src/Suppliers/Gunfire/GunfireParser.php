@@ -889,24 +889,20 @@ final class GunfireParser extends AbstractSupplierParser
 
     private function parseDescription(Crawler $crawler, string $html): string
     {
-        // Strategy 1: DOM — find the longest text block from product sections
+        // Gunfire uses .projector_longdescription for full product description
         $selectors = [
+            '.projector_longdescription',
+            '[id*="projector_longdescription"]',
+            '.long-description',
             '.product-description',
             '.product__description',
             '#product-description',
             '#description',
-            '.description',
+            '.description_wrapper',
             '.product-desc',
-            '.long-description',
             '.product-info-detailed',
-            '.product-detail-description',
             '.resetcss',
             '.product-text',
-            '.tab-content',
-            '.tabs-content',
-            '[data-tab="description"]',
-            '[data-tab-content="description"]',
-            '[itemprop="description"]',
         ];
 
         $best = '';
@@ -914,7 +910,7 @@ final class GunfireParser extends AbstractSupplierParser
             try {
                 $crawler->filter($sel)->each(function (Crawler $node) use (&$best) {
                     $text = $this->cleanText($node->text(''));
-                    if (mb_strlen($text) > mb_strlen($best)) {
+                    if (mb_strlen($text) > mb_strlen($best) && mb_strlen($text) > 50) {
                         $best = $text;
                     }
                 });
@@ -923,15 +919,18 @@ final class GunfireParser extends AbstractSupplierParser
             }
         }
 
-        // Strategy 2: JSON-LD description (often longer than meta)
+        // JSON-LD description
         if (mb_strlen($best) < 100) {
             $jsonDesc = $this->extractFromJsonLd($html, 'description');
-            if (mb_strlen($jsonDesc) > mb_strlen($best)) {
-                $best = $this->cleanText($jsonDesc);
+            if (!empty($jsonDesc)) {
+                $cleaned = $this->cleanText(strip_tags(html_entity_decode($jsonDesc, ENT_QUOTES, 'UTF-8')));
+                if (mb_strlen($cleaned) > mb_strlen($best)) {
+                    $best = $cleaned;
+                }
             }
         }
 
-        // Strategy 3: og:description as last resort
+        // og:description as last resort
         if (mb_strlen($best) < 50) {
             $ogDesc = $this->nodeAttr($crawler, 'meta[property="og:description"]', 'content');
             if (mb_strlen($ogDesc) > mb_strlen($best)) {
@@ -950,23 +949,16 @@ final class GunfireParser extends AbstractSupplierParser
     {
         $specs = [];
 
-        // Strategy 1: <table> with spec rows (th/td or td/td pairs)
+        // Strategy 1: Gunfire uses table.n54117_dictionary for specs
         $tableSelectors = [
+            'table.n54117_dictionary',
+            '.projector_dictionary table',
             '.product-attributes table',
             '.product-params table',
-            '.product-specifications table',
             '.specifications table',
             '.spec-table',
-            '.params table',
-            '.parameters table',
-            '.technical-data table',
-            '.tech-specs table',
-            '.features table',
-            '.product-features table',
-            '.attribute-table',
             'table.attributes',
             'table.params',
-            'table.specifications',
             'table',
         ];
 
