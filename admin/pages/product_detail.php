@@ -12,9 +12,10 @@ $offers = $db->fetchAll(
     [$id]
 );
 
-// Kyiv price settings
+// Price settings
 $kyivMarkup = (float)($db->fetchOne("SELECT value FROM settings WHERE `key` = 'kyiv_markup'")['value'] ?? '1.21');
 $plnRate = (float)($db->fetchOne("SELECT value FROM settings WHERE `key` = 'pln_uah_rate'")['value'] ?? '10.9');
+$eurRate = (float)($db->fetchOne("SELECT value FROM settings WHERE `key` = 'eur_uah_rate'")['value'] ?? '45.5');
 
 $history = $db->fetchAll(
     "SELECT h.*, so.name AS offer_name, s.code AS supplier_code, s.name AS supplier_name
@@ -188,10 +189,9 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
             <thead><tr>
                 <th></th>
                 <th><?= t('suppliers') ?></th>
-                <th>Акційна</th>
-                <th>Звичайна</th>
+                <th>Акційна ₴</th>
+                <th>Ціна Польща ₴</th>
                 <th>Закупка (Net)</th>
-                <th><?= t('currency') ?></th>
                 <th class="text-primary">Ціна Київ ₴</th>
                 <th><?= t('availability') ?></th>
                 <th><?= t('stock') ?></th>
@@ -205,29 +205,40 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
                 $priceRegular = (float)($o['price_regular'] ?? 0);
                 $cur = strtoupper($o['currency'] ?? 'PLN');
 
-                // Net = purchase price (закупка з B2B або акційна з сайту)
+                // Currency rate for this offer
+                $rate = match ($cur) {
+                    'PLN' => $plnRate,
+                    'EUR' => $eurRate,
+                    'UAH' => 1.0,
+                    default => $plnRate,
+                };
+
+                // Акційна в грн
+                $saleUah = $pricePurchase > 0 ? round($pricePurchase * $rate, 0) : 0;
+
+                // Ціна Польща = Gross (звичайна) * курс
+                $grossForPoland = $priceRegular > 0 ? $priceRegular : $pricePurchase;
+                $polandUah = $grossForPoland > 0 ? round($grossForPoland * $rate, 0) : 0;
+
+                // Net = purchase price (закупка)
                 $netPrice = $pricePurchase;
 
-                // Gross для Київ = regular price (звичайна)
-                $grossForKyiv = $priceRegular > 0 ? $priceRegular : $pricePurchase;
-
-                $kyivPrice = 0;
-                if ($cur === 'PLN' && $grossForKyiv > 0) {
-                    $kyivPrice = round($grossForKyiv * $kyivMarkup * $plnRate, 2);
-                } elseif ($cur === 'EUR' && $grossForKyiv > 0) {
-                    $eurRate = (float)($db->fetchOne("SELECT value FROM settings WHERE `key` = 'eur_uah_rate'")['value'] ?? '45.5');
-                    $kyivPrice = round($grossForKyiv * $kyivMarkup * $eurRate, 2);
-                } elseif ($cur === 'UAH') {
-                    $kyivPrice = round($grossForKyiv * $kyivMarkup, 2);
-                }
+                // Ціна Київ = Gross * markup * курс
+                $kyivPrice = $grossForPoland > 0 ? round($grossForPoland * $kyivMarkup * $rate, 0) : 0;
             ?>
                 <tr class="<?= $i === 0 && count($offers) > 1 ? 'table-success' : '' ?>">
                     <td><?= $i === 0 && count($offers) > 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : '' ?></td>
                     <td><strong><?= esc($o['supplier_name']) ?></strong> <small class="text-muted"><?= esc($o['supplier_code']) ?></small></td>
-                    <td><?= $pricePurchase > 0 ? number_format($pricePurchase, 2) : '—' ?></td>
-                    <td><?= $priceRegular > 0 ? number_format($priceRegular, 2) : '—' ?></td>
-                    <td><strong class="text-success"><?= $netPrice > 0 ? number_format($netPrice, 2) : '—' ?></strong></td>
-                    <td><?= esc($cur) ?></td>
+                    <td title="<?= $pricePurchase > 0 ? number_format($pricePurchase, 2) . ' ' . $cur : '' ?>" style="cursor:help">
+                        <?= $saleUah > 0 ? number_format($saleUah, 0) . ' ₴' : '—' ?>
+                    </td>
+                    <td title="<?= $grossForPoland > 0 ? number_format($grossForPoland, 2) . ' ' . $cur : '' ?>" style="cursor:help">
+                        <?= $polandUah > 0 ? number_format($polandUah, 0) . ' ₴' : '—' ?>
+                    </td>
+                    <td title="<?= $netPrice > 0 ? number_format($netPrice, 2) . ' ' . $cur : '' ?>" style="cursor:help">
+                        <strong class="text-success"><?= $netPrice > 0 ? number_format(round($netPrice * $rate, 0), 0) . ' ₴' : '—' ?></strong>
+                        <br><small class="text-muted"><?= $netPrice > 0 ? number_format($netPrice, 2) . ' ' . $cur : '' ?></small>
+                    </td>
                     <td class="fw-bold text-primary"><?= $kyivPrice > 0 ? number_format($kyivPrice, 0) . ' ₴' : '—' ?></td>
                     <td><?= badge($o['availability'] ?? 'unknown') ?></td>
                     <td><small><?= esc($o['stock_qty_text'] ?? '') ?></small></td>
