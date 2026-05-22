@@ -1112,7 +1112,9 @@ final class GunfireParser extends AbstractSupplierParser
                 $crawler->filter($sel)->each(function (Crawler $node) use (&$breadcrumbs) {
                     $name = $this->cleanText($node->text(''));
                     $href = $node->attr('href') ?? '';
-                    if (!empty($name) && mb_strtolower($name) !== 'home' && mb_strtolower($name) !== 'gunfire') {
+                    $lower = mb_strtolower($name);
+                    $skip = ['home', 'home page', 'homepage', 'gunfire', 'back', 'main', 'główna', 'start'];
+                    if (!empty($name) && !in_array($lower, $skip, true) && mb_strlen($name) > 1) {
                         $breadcrumbs[] = [
                             'name' => $name,
                             'url'  => $href ? $this->absoluteUrl($href) : '',
