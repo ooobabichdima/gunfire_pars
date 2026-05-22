@@ -63,10 +63,11 @@ if (!empty($singleSku)) {
     $logger->console("Пошук по SKU: {$singleSku}");
     $result = $parser->searchBySku($singleSku);
     if ($result) {
-        $logger->console("Знайдено: {$result['name']}");
-        $logger->console("  Net: {$result['net_price']} PLN");
-        $logger->console("  Gross: " . ($result['gross_price'] ?? '—') . " PLN");
-        $logger->console("  Suggested: " . ($result['suggested_price'] ?? '—') . " PLN");
+        $logger->console("Знайдено: " . ($result['name'] ?? '—'));
+        $logger->console("  SKU: " . ($result['sku'] ?? '—'));
+        $logger->console("  Net: " . number_format((float)($result['net_price'] ?? 0), 2) . " PLN");
+        $logger->console("  Gross: " . (isset($result['gross_price']) ? number_format($result['gross_price'], 2) : '—') . " PLN");
+        $logger->console("  Suggested: " . (isset($result['suggested_price']) ? number_format($result['suggested_price'], 2) : '—') . " PLN");
         $logger->console("  Stock: " . ($result['stock'] ?? '—'));
         $logger->console("  EAN: " . ($result['ean'] ?? '—'));
         $logger->console("  IAI: " . ($result['iai'] ?? '—'));

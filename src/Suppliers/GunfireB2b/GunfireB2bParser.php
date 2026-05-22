@@ -301,45 +301,79 @@ final class GunfireB2bParser
     private function parseB2bProduct(string $html, int $b2bId): ?array
     {
         $data = ['b2b_id' => $b2bId];
+        $crawler = new Crawler($html);
 
-        // Name: [SKU] Product Name - Color
-        if (preg_match('/<h[12][^>]*>\s*(?:\[([^\]]+)\])?\s*(.*?)\s*<\/h[12]>/is', $html, $m)) {
-            $data['sku'] = trim($m[1] ?? '');
-            $data['name'] = trim(strip_tags($m[2]));
+        // Name from h1/h2 or title
+        try {
+            $h1 = trim($crawler->filter('h1, h2')->first()->text(''));
+            if (!empty($h1)) {
+                // Extract [SKU] from name: "[SWL-03-018552] Snow Wolf M98..."
+                if (preg_match('/^\[([^\]]+)\]\s*(.+)$/s', $h1, $m)) {
+                    $data['sku'] = trim($m[1]);
+                    $data['name'] = trim($m[2]);
+                } else {
+                    $data['name'] = $h1;
+                }
+            }
+        } catch (\Exception) {}
+
+        // Fallback name from title tag
+        if (empty($data['name'])) {
+            try {
+                $title = trim($crawler->filter('title')->first()->text(''));
+                $data['name'] = preg_replace('/\s*[-|].*$/', '', $title) ?? $title;
+            } catch (\Exception) {}
         }
 
-        // Net price
-        if (preg_match('/Net[\s\S]*?([\d,.\s]+)\s*PLN/i', $html, $m)) {
-            $data['net_price'] = $this->parsePrice($m[1]);
+        // Parse all key-value pairs from the page
+        // Format: "Label ... Value PLN" or "Label ... Value"
+        $pairs = [];
+        try {
+            $crawler->filter('tr, .row, dl, .detail-row')->each(function (Crawler $row) use (&$pairs) {
+                $text = trim($row->text(''));
+                if (preg_match('/^([\w\s\[\]]+?)\s+([\d,.\s]+\s*PLN|[\d,.\s]+\s*pcs\.?|\d{8,14}|\d{7,15}|[\w-]+)$/m', $text, $m)) {
+                    $pairs[trim($m[1])] = trim($m[2]);
+                }
+            });
+        } catch (\Exception) {}
+
+        // Net price — try multiple patterns
+        if (preg_match('/(?:^|\s)Net\b[\s\S]{0,100}?([\d][[\d\s,.]*[\d])\s*PLN/i', $html, $m)) {
+            $data['net_price'] = $this->parsePriceSafe($m[1]);
+        }
+        // Before discount Net (take the discounted one if exists)
+        if (preg_match('/(?:^|\s)Net\s*\n?\s*([\d][\d\s,.]*[\d])\s*PLN/mi', $html, $m)) {
+            $price = $this->parsePriceSafe($m[1]);
+            if ($price > 0) $data['net_price'] = $price;
         }
 
         // Gross price
-        if (preg_match('/Gross[\s\S]*?([\d,.\s]+)\s*PLN/i', $html, $m)) {
-            $data['gross_price'] = $this->parsePrice($m[1]);
+        if (preg_match('/(?:^|\s)Gross\b[\s\S]{0,100}?([\d][\d\s,.]*[\d])\s*PLN/i', $html, $m)) {
+            $data['gross_price'] = $this->parsePriceSafe($m[1]);
         }
 
         // Suggested price
-        if (preg_match('/Suggested[\s\S]*?([\d,.\s]+)\s*PLN/i', $html, $m)) {
-            $data['suggested_price'] = $this->parsePrice($m[1]);
+        if (preg_match('/Suggested\s+([\d][\d\s,.]*[\d])\s*PLN/i', $html, $m)) {
+            $data['suggested_price'] = $this->parsePriceSafe($m[1]);
         }
 
         // Stock
-        if (preg_match('/Stock[\s\S]*?([\d,.]+)\s*pcs/i', $html, $m)) {
+        if (preg_match('/Stock\s+([\d,.]+)\s*pcs/i', $html, $m)) {
             $data['stock'] = trim($m[1]) . ' pcs';
         }
 
         // EAN
-        if (preg_match('/EAN[\s\S]*?(\d{8,14})/i', $html, $m)) {
+        if (preg_match('/EAN\s+(\d{8,14})/i', $html, $m)) {
             $data['ean'] = $m[1];
         }
 
-        // IAI code (links to gunfire.com)
-        if (preg_match('/IAI[\s\S]*?(\d{7,15})/i', $html, $m)) {
+        // IAI code
+        if (preg_match('/IAI\s+(\d{7,15})/i', $html, $m)) {
             $data['iai'] = $m[1];
         }
 
         // Producer
-        if (preg_match('/Producer[\s\S]*?<[^>]*>([^<]+)/i', $html, $m)) {
+        if (preg_match('/Producer\s+(\w[\w\s]{1,30})/i', $html, $m)) {
             $data['producer'] = trim($m[1]);
         }
 
@@ -350,12 +384,28 @@ final class GunfireB2bParser
         return $data;
     }
 
-    private function parsePrice(string $text): ?float
+    /**
+     * Parse price handling both "1,313.00" and "1 313.00" formats.
+     */
+    private function parsePriceSafe(string $text): float
     {
-        $text = str_replace([' ', "\xc2\xa0", ','], ['', '', '.'], trim($text));
-        if (preg_match('/(\d+\.?\d*)/', $text, $m)) {
-            return (float)$m[1];
+        $text = trim($text);
+        // Remove spaces used as thousands separator
+        $text = preg_replace('/(\d)\s+(\d)/', '$1$2', $text);
+        // If format is "1,313.00" (comma = thousands) — remove comma
+        if (preg_match('/^\d{1,3},\d{3}\./', $text)) {
+            $text = str_replace(',', '', $text);
         }
-        return null;
+        // If format is "1.313,00" (dot = thousands, comma = decimal) — European
+        elseif (preg_match('/^\d{1,3}\.\d{3},/', $text)) {
+            $text = str_replace('.', '', $text);
+            $text = str_replace(',', '.', $text);
+        }
+        // Simple comma as decimal
+        elseif (str_contains($text, ',') && !str_contains($text, '.')) {
+            $text = str_replace(',', '.', $text);
+        }
+
+        return (float)$text;
     }
 }
