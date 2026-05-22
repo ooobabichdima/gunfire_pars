@@ -35,9 +35,11 @@ return [
 
     'suppliers' => [
         'gunfire' => [
-            'base_url'  => 'https://gunfire.com',
-            'locale'    => 'en',
-            'currency'  => 'PLN',
+            'base_url'      => 'https://gunfire.com',
+            'locale'        => 'en',
+            'currency'      => 'PLN',
+            'b2b_email'     => 'warkit.ua2@gmail.com',
+            'b2b_password'  => 'Gunfire4!dR6',
         ],
         'ibis' => [
             'base_url'          => 'https://ibis.net.ua',
