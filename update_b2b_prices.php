@@ -63,6 +63,13 @@ if (!empty($singleSku)) {
     $logger->console("Пошук по SKU: {$singleSku}");
     $result = $parser->searchBySku($singleSku);
     if ($result) {
+        // Get settings for Kyiv price calculation
+        $markup = (float)($db->fetchOne("SELECT value FROM settings WHERE `key` = 'kyiv_markup'")['value'] ?? '1.21');
+        $plnRate = (float)($db->fetchOne("SELECT value FROM settings WHERE `key` = 'pln_uah_rate'")['value'] ?? '10.9');
+
+        $gross = (float)($result['gross_price'] ?? $result['net_price'] ?? 0);
+        $kyivPrice = round($gross * $markup * $plnRate, 2);
+
         $logger->console("Знайдено: " . ($result['name'] ?? '—'));
         $logger->console("  SKU: " . ($result['sku'] ?? '—'));
         $logger->console("  Net: " . number_format((float)($result['net_price'] ?? 0), 2) . " PLN");
@@ -71,6 +78,9 @@ if (!empty($singleSku)) {
         $logger->console("  Stock: " . ($result['stock'] ?? '—'));
         $logger->console("  EAN: " . ($result['ean'] ?? '—'));
         $logger->console("  IAI: " . ($result['iai'] ?? '—'));
+        $logger->console("  ──────────────────────────");
+        $logger->console("  Ціна Київ: " . number_format($kyivPrice, 2) . " UAH");
+        $logger->console("    (Gross {$gross} × {$markup} × {$plnRate} PLN/UAH)");
     } else {
         $logger->console("Товар не знайдено");
     }

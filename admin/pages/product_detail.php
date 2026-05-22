@@ -12,6 +12,10 @@ $offers = $db->fetchAll(
     [$id]
 );
 
+// Kyiv price settings
+$kyivMarkup = (float)($db->fetchOne("SELECT value FROM settings WHERE `key` = 'kyiv_markup'")['value'] ?? '1.21');
+$plnRate = (float)($db->fetchOne("SELECT value FROM settings WHERE `key` = 'pln_uah_rate'")['value'] ?? '10.9');
+
 $history = $db->fetchAll(
     "SELECT h.*, so.name AS offer_name, s.code AS supplier_code, s.name AS supplier_name
      FROM supplier_offer_price_history h
@@ -183,16 +187,30 @@ $chartColors = ['#0d6efd', '#198754', '#dc3545', '#ffc107', '#6f42c1', '#0dcaf0'
         <table class="table table-sm table-hover mb-0">
             <thead><tr>
                 <th></th><th><?= t('suppliers') ?></th><th><?= t('purchase_price') ?></th><th><?= t('regular_price') ?></th><th><?= t('currency') ?></th>
+                <th>Ціна Київ (UAH)</th>
                 <th><?= t('availability') ?></th><th><?= t('stock') ?></th><th><?= t('last_seen') ?></th><th><?= t('last_price_check') ?></th><th><?= t('active') ?></th><th></th>
             </tr></thead>
             <tbody>
-            <?php foreach ($offers as $i => $o): ?>
+            <?php foreach ($offers as $i => $o):
+                $gross = (float)($o['price_regular'] ?? $o['price_purchase'] ?? 0);
+                $cur = strtoupper($o['currency'] ?? 'PLN');
+                $kyivPrice = 0;
+                if ($cur === 'PLN' && $gross > 0) {
+                    $kyivPrice = round($gross * $kyivMarkup * $plnRate, 2);
+                } elseif ($cur === 'EUR' && $gross > 0) {
+                    $eurRate = (float)($db->fetchOne("SELECT value FROM settings WHERE `key` = 'eur_uah_rate'")['value'] ?? '45.5');
+                    $kyivPrice = round($gross * $kyivMarkup * $eurRate, 2);
+                } elseif ($cur === 'UAH') {
+                    $kyivPrice = round($gross * $kyivMarkup, 2);
+                }
+            ?>
                 <tr class="<?= $i === 0 && count($offers) > 1 ? 'table-success' : '' ?>">
                     <td><?= $i === 0 && count($offers) > 1 ? '<i class="bi bi-trophy-fill text-warning"></i>' : '' ?></td>
                     <td><strong><?= esc($o['supplier_name']) ?></strong> <small class="text-muted"><?= esc($o['supplier_code']) ?></small></td>
                     <td><strong><?= $o['price_purchase'] !== null ? number_format((float)$o['price_purchase'], 2) : '—' ?></strong></td>
                     <td class="text-muted"><?= $o['price_regular'] !== null ? number_format((float)$o['price_regular'], 2) : '—' ?></td>
                     <td><?= esc($o['currency']) ?></td>
+                    <td class="fw-bold text-primary"><?= $kyivPrice > 0 ? number_format($kyivPrice, 2) . ' ₴' : '—' ?></td>
                     <td><?= badge($o['availability'] ?? 'unknown') ?></td>
                     <td><small><?= esc($o['stock_qty_text'] ?? '') ?></small></td>
                     <td><?= time_ago($o['last_seen_at']) ?></td>
