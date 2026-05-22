@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             'default_batch'  => $_POST['default_batch'] ?? '50',
             'kyiv_markup'    => $_POST['kyiv_markup'] ?? '1.21',
             'pln_uah_rate'   => $_POST['pln_uah_rate'] ?? '10.9',
+            'eur_uah_rate'   => $_POST['eur_uah_rate'] ?? '45.5',
         ];
         foreach ($settings as $key => $value) {
             $db->query(
@@ -37,6 +38,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             );
         }
         flash_set('success', t('settings_saved'));
+    }
+
+    if ($action === 'update_rates') {
+        $rateService = new \App\Services\CurrencyRate($db, $logger);
+        $rates = $rateService->updateFromPrivatBank();
+        if (!empty($rates)) {
+            flash_set('success', 'Курси оновлено з ПриватБанку: EUR=' . ($rates['eur_uah_rate'] ?? '?') . ', PLN=' . ($rates['pln_uah_rate'] ?? '?'));
+        } else {
+            flash_set('error', 'Помилка оновлення курсів');
+        }
     }
 
     header('Location: ' . url('settings'));
@@ -93,27 +104,32 @@ foreach ($rows as $r) { $currentSettings[$r['key']] = $r['value']; }
                         <input type="number" name="default_batch" class="form-control form-control-sm" value="<?= esc($currentSettings['default_batch'] ?? '50') ?>">
                     </div>
                     <hr>
-                    <h6>Розрахунок ціни Київ</h6>
-                    <small class="text-muted d-block mb-2">Формула: Gross × Коефіцієнт × Курс PLN/UAH</small>
+                    <h6>Курси валют</h6>
                     <div class="row g-2 mb-2">
-                        <div class="col-6">
-                            <label class="form-label">Коефіцієнт (націнка)</label>
-                            <input type="text" name="kyiv_markup" class="form-control form-control-sm" value="<?= esc($currentSettings['kyiv_markup'] ?? '1.21') ?>" placeholder="1.21">
+                        <div class="col-4">
+                            <label class="form-label">EUR → UAH</label>
+                            <input type="text" name="eur_uah_rate" class="form-control form-control-sm" value="<?= esc($currentSettings['eur_uah_rate'] ?? '45.5') ?>">
                         </div>
-                        <div class="col-6">
-                            <label class="form-label">Курс PLN → UAH</label>
-                            <input type="text" name="pln_uah_rate" class="form-control form-control-sm" value="<?= esc($currentSettings['pln_uah_rate'] ?? '10.9') ?>" placeholder="10.9">
+                        <div class="col-4">
+                            <label class="form-label">PLN → UAH</label>
+                            <input type="text" name="pln_uah_rate" class="form-control form-control-sm" value="<?= esc($currentSettings['pln_uah_rate'] ?? '10.9') ?>">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">Коеф. націнки</label>
+                            <input type="text" name="kyiv_markup" class="form-control form-control-sm" value="<?= esc($currentSettings['kyiv_markup'] ?? '1.21') ?>">
                         </div>
                     </div>
-                    <?php
-                    $exGross = 1614.99;
-                    $exMarkup = (float)($currentSettings['kyiv_markup'] ?? 1.21);
-                    $exRate = (float)($currentSettings['pln_uah_rate'] ?? 10.9);
-                    $exKyiv = round($exGross * $exMarkup * $exRate, 2);
-                    ?>
-                    <small class="text-muted">Приклад: <?= number_format($exGross, 2) ?> PLN × <?= $exMarkup ?> × <?= $exRate ?> = <strong><?= number_format($exKyiv, 2) ?> UAH</strong></small>
+                    <small class="text-muted">Оновлено: <?= esc($currentSettings['rates_updated_at'] ?? 'ніколи') ?></small>
+                    <div class="mt-2 mb-2">
+                        <small class="text-muted">Формула Київ: Gross × <?= esc($currentSettings['kyiv_markup'] ?? '1.21') ?> × курс = Ціна ₴</small>
+                    </div>
                     <hr>
                     <button class="btn btn-primary btn-sm"><?= t('save') ?></button>
+                </form>
+                <form method="POST" class="mt-2">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="update_rates">
+                    <button class="btn btn-outline-success btn-sm"><i class="bi bi-arrow-repeat"></i> Оновити курси з ПриватБанку</button>
                 </form>
             </div>
         </div>
