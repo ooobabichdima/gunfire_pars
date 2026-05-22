@@ -38,11 +38,13 @@
             <li><a class="nav-link <?= is_page('queue') ? 'active' : '' ?>" href="<?= url('queue') ?>"><i class="bi bi-list-task"></i> <?= t('nav_queue') ?></a></li>
             <li class="mt-2"><small class="text-muted px-3"><?= t('nav_data') ?></small></li>
             <li><a class="nav-link <?= is_page('catalog') || is_page('product') ? 'active' : '' ?>" href="<?= url('catalog') ?>"><i class="bi bi-grid-3x3-gap"></i> <?= t('nav_catalog') ?></a></li>
+            <li><a class="nav-link <?= is_page('categories') ? 'active' : '' ?>" href="<?= url('categories') ?>"><i class="bi bi-diagram-3"></i> Категорії</a></li>
             <li><a class="nav-link <?= is_page('offers') ? 'active' : '' ?>" href="<?= url('offers') ?>"><i class="bi bi-tags"></i> <?= t('nav_offers') ?></a></li>
             <li><a class="nav-link <?= is_page('prices') ? 'active' : '' ?>" href="<?= url('prices') ?>"><i class="bi bi-currency-exchange"></i> <?= t('nav_prices') ?></a></li>
             <li><a class="nav-link <?= is_page('price_history') ? 'active' : '' ?>" href="<?= url('price_history') ?>"><i class="bi bi-graph-up"></i> <?= t('nav_price_history') ?></a></li>
             <li><a class="nav-link <?= is_page('alerts') ? 'active' : '' ?>" href="<?= url('alerts') ?>"><i class="bi bi-bell"></i> <?= t('nav_alerts') ?> <?php if ($unreadAlerts > 0): ?><span class="badge bg-danger rounded-pill"><?= $unreadAlerts ?></span><?php endif; ?></a></li>
             <li><a class="nav-link <?= is_page('analytics') ? 'active' : '' ?>" href="<?= url('analytics') ?>"><i class="bi bi-bar-chart-line"></i> <?= t('nav_analytics') ?></a></li>
+            <li><a class="nav-link <?= is_page('content') ? 'active' : '' ?>" href="<?= url('content') ?>"><i class="bi bi-magic"></i> Контент</a></li>
             <li class="mt-2"><small class="text-muted px-3"><?= t('nav_system') ?></small></li>
             <li><a class="nav-link <?= is_page('jobs') ? 'active' : '' ?>" href="<?= url('jobs') ?>"><i class="bi bi-play-circle"></i> <?= t('nav_jobs') ?></a></li>
             <li><a class="nav-link <?= is_page('logs') ? 'active' : '' ?>" href="<?= url('logs') ?>"><i class="bi bi-journal-text"></i> <?= t('nav_logs') ?></a></li>
