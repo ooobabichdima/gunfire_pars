@@ -49,7 +49,9 @@ final class RelationBuilder
 
             foreach ($breadcrumbs as $index => $crumb) {
                 $name = trim($crumb['name'] ?? '');
-                if (empty($name) || mb_strtolower($name) === 'home' || mb_strtolower($name) === 'główna') {
+                $lower = mb_strtolower($name);
+                $skip = ['', 'home', 'home page', 'homepage', 'back', 'main', 'główna', 'start', 'gunfire', 'ібіс'];
+                if (in_array($lower, $skip, true) || mb_strlen($name) < 2) {
                     continue;
                 }
 
