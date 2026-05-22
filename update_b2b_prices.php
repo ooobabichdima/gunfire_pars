@@ -42,7 +42,7 @@ if (!$lock->acquire()) {
 $db = Database::getInstance($config['db']);
 
 // Get B2B config from supplier or config.php
-$b2bConfig = $config['suppliers']['gunfire_b2b'] ?? [];
+$b2bConfig = $config['suppliers']['gunfire'] ?? [];
 $supplierRow = $db->fetchOne("SELECT config_json FROM suppliers WHERE code = 'gunfire'");
 $supplierCfg = json_decode($supplierRow['config_json'] ?? '{}', true) ?: [];
 $b2bConfig = array_merge($b2bConfig, $supplierCfg);
