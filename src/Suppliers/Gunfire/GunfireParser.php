@@ -46,12 +46,8 @@ final class GunfireParser extends AbstractSupplierParser
         $this->logger->info('Scanning categories from Gunfire...');
         $urls = [];
 
-        // Strategy 1: Parse sitemap XML
-        $sitemapUrls = $this->parseSitemapIndex();
-        if (!empty($sitemapUrls)) {
-            $urls = array_merge($urls, $sitemapUrls);
-            $this->logger->info("Sitemap: found " . count($sitemapUrls) . " category URLs");
-        }
+        // Strategy 1: Crawl /en/sitemap.php (HTML sitemap)
+        $urls = $this->crawlSitemapPage();
 
         // Strategy 2: Crawl the homepage navigation
         if (empty($urls)) {
@@ -233,62 +229,6 @@ final class GunfireParser extends AbstractSupplierParser
     // ==================================================================
     //  Category scanning strategies
     // ==================================================================
-
-    private function parseSitemapIndex(): array
-    {
-        $urls = [];
-        $sitemapLocations = [
-            $this->getBaseUrl() . '/sitemap.xml',
-            $this->getBaseUrl() . '/en/sitemap.xml',
-            $this->getBaseUrl() . '/sitemap_index.xml',
-        ];
-
-        foreach ($sitemapLocations as $sitemapUrl) {
-            $xml = $this->http->getHtml($sitemapUrl);
-            if ($xml === null) {
-                continue;
-            }
-
-            // Parse sitemap index for sub-sitemaps
-            if (preg_match_all('#<loc>(.*?)</loc>#', $xml, $matches)) {
-                foreach ($matches[1] as $loc) {
-                    $loc = html_entity_decode($loc);
-                    if ($this->isCategoryUrl($loc)) {
-                        $urls[] = $loc;
-                    } elseif (str_contains($loc, 'sitemap') && str_contains($loc, '.xml')) {
-                        $subUrls = $this->parseSitemapFile($loc);
-                        $urls = array_merge($urls, $subUrls);
-                    }
-                }
-            }
-
-            if (!empty($urls)) {
-                break;
-            }
-        }
-
-        return $urls;
-    }
-
-    private function parseSitemapFile(string $url): array
-    {
-        $urls = [];
-        $xml = $this->http->getHtml($url);
-        if ($xml === null) {
-            return $urls;
-        }
-
-        if (preg_match_all('#<loc>(.*?)</loc>#', $xml, $matches)) {
-            foreach ($matches[1] as $loc) {
-                $loc = html_entity_decode($loc);
-                if ($this->isCategoryUrl($loc)) {
-                    $urls[] = $loc;
-                }
-            }
-        }
-
-        return $urls;
-    }
 
     private function crawlHomepageCategories(): array
     {
