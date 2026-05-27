@@ -25,7 +25,7 @@ use App\Suppliers\SupplierParserFactory;
 // ---------------------------------------------------------------------------
 // CLI arguments
 // ---------------------------------------------------------------------------
-$opts = getopt('', ['supplier:', 'limit:', 'offset:', 'product-id:', 'active:', 'mode:', 'help']);
+$opts = getopt('', ['supplier:', 'limit:', 'offset:', 'product-id:', 'active:', 'mode:', 'no-proxy', 'proxy-only', 'help']);
 
 if (isset($opts['help'])) {
     echo "Usage: php update_prices.php --supplier=gunfire [--limit=100] [--offset=0] [--product-id=123] [--active=1] [--mode=refresh|compare]\n";
@@ -41,6 +41,8 @@ if (isset($opts['help'])) {
 $supplierCode = $opts['supplier'] ?? '';
 $limit = (int)($opts['limit'] ?? 100);
 $offset = (int)($opts['offset'] ?? 0);
+$useProxy = !isset($opts['no-proxy']);
+$proxyOnly = isset($opts['proxy-only']);
 $productId = isset($opts['product-id']) ? (int)$opts['product-id'] : null;
 $mode = $opts['mode'] ?? 'refresh';
 
@@ -106,13 +108,23 @@ if (empty($supplierCode)) {
 }
 
 $proxyManager = new ProxyManager($logger, $config['log']['dir']);
-$proxyManager->load();
-foreach ($config['http']['custom_proxies'] ?? [] as $cp) { $proxyManager->addProxy($cp); }
+
+$customProxies = $config['http']['custom_proxies'] ?? [];
 if (!empty($supplierCode)) {
     $supplierRow = $db->fetchOne("SELECT config_json FROM suppliers WHERE code = ?", [$supplierCode]);
-    foreach (json_decode($supplierRow['config_json'] ?? '{}', true)['proxies'] ?? [] as $cp) { $proxyManager->addProxy($cp); }
+    $customProxies = array_merge($customProxies, json_decode($supplierRow['config_json'] ?? '{}', true)['proxies'] ?? []);
 }
+foreach ($customProxies as $cp) { $proxyManager->addProxy($cp); }
+
+if ($useProxy) {
+    $proxyManager->load();
+}
+$proxyManager->setEnabled(true);
+
 $http = new HttpClient($config['http'], $logger, $proxyManager);
+if ($proxyOnly) {
+    $http->setProxyOnly(true);
+}
 
 try {
     $parser = SupplierParserFactory::create($supplierCode, $db, $http, $logger);

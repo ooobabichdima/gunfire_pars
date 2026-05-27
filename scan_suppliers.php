@@ -22,15 +22,20 @@ use App\Suppliers\SupplierParserFactory;
 // ---------------------------------------------------------------------------
 // CLI arguments
 // ---------------------------------------------------------------------------
-$opts = getopt('', ['supplier:', 'limit:', 'mode:', 'help']);
+$opts = getopt('', ['supplier:', 'limit:', 'mode:', 'no-proxy', 'proxy-only', 'help']);
 
 if (isset($opts['help'])) {
-    echo "Usage: php scan_suppliers.php --supplier=gunfire [--limit=500] [--mode=categories|listings|all]\n";
-    echo "  --supplier   Supplier code (required)\n";
-    echo "  --limit      Max product URLs to enqueue per category (0 = unlimited)\n";
-    echo "  --mode       categories | listings | all (default: all)\n";
+    echo "Usage: php scan_suppliers.php --supplier=gunfire [--limit=500] [--mode=all] [--no-proxy] [--proxy-only]\n";
+    echo "  --supplier    Supplier code (required)\n";
+    echo "  --limit       Max product URLs to enqueue per category (0 = unlimited)\n";
+    echo "  --mode        categories | listings | all (default: all)\n";
+    echo "  --no-proxy    Skip free proxy fetching\n";
+    echo "  --proxy-only  Only use proxies, no direct\n";
     exit(0);
 }
+
+$useProxy = !isset($opts['no-proxy']);
+$proxyOnly = isset($opts['proxy-only']);
 
 $supplierCode = $opts['supplier'] ?? '';
 if (empty($supplierCode)) {
@@ -56,11 +61,23 @@ if (!$lock->acquire()) {
 
 $db = Database::getInstance($config['db']);
 $proxyManager = new ProxyManager($logger, $config['log']['dir']);
-$proxyManager->load();
-foreach ($config['http']['custom_proxies'] ?? [] as $cp) { $proxyManager->addProxy($cp); }
+
+$customProxies = $config['http']['custom_proxies'] ?? [];
 $supplierRow = $db->fetchOne("SELECT config_json FROM suppliers WHERE code = ?", [$supplierCode]);
-foreach (json_decode($supplierRow['config_json'] ?? '{}', true)['proxies'] ?? [] as $cp) { $proxyManager->addProxy($cp); }
+$customProxies = array_merge($customProxies, json_decode($supplierRow['config_json'] ?? '{}', true)['proxies'] ?? []);
+foreach ($customProxies as $cp) { $proxyManager->addProxy($cp); }
+
+if ($useProxy) {
+    $proxyManager->load();
+}
+$proxyManager->setEnabled(true);
+$logger->console("[proxy] Всього: " . $proxyManager->getWorkingCount() . " робочих");
+
 $http = new HttpClient($config['http'], $logger, $proxyManager);
+if ($proxyOnly) {
+    $http->setProxyOnly(true);
+    $logger->console("[proxy] Режим: ТІЛЬКИ проксі");
+}
 $queue = new QueueManager($db, $logger);
 
 // ---------------------------------------------------------------------------
