@@ -69,6 +69,8 @@ final class Logger
 
     public function console(string $message): void
     {
-        fwrite(STDOUT, $message . "\n");
+        if (PHP_SAPI === 'cli' && defined('STDOUT')) {
+            fwrite(STDOUT, $message . "\n");
+        }
     }
 }
